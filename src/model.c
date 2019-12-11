@@ -91,7 +91,6 @@ mesh->num_normals = obj_data.vertex_normal_count;
 mesh->num_faces=obj_data.face_count;
 mesh->num_uvs=obj_data.vertex_texture_count;
 mesh->num_materials=obj_data.material_count;
-
 // Allocate arrays
 mesh->vertices = malloc(mesh->num_vertices*sizeof(vector3_t));
 mesh->normals = malloc(mesh->num_normals*sizeof(vector3_t));
@@ -164,8 +163,8 @@ mesh->materials=malloc(mesh->num_materials*sizeof(material_t));
 			return 1;
 			}
 		}
-	mesh->materials[i].specular_intensity=vector3_norm(vector3(obj_data.material_list[i]->spec[0],obj_data.material_list[i]->spec[1],obj_data.material_list[i]->spec[2]));
-	mesh->materials[i].specular_exponent=obj_data.material_list[i]->shiny;
+	mesh->materials[i].specular_color=vector3(obj_data.material_list[i]->spec[0],obj_data.material_list[i]->spec[1],obj_data.material_list[i]->spec[2]);
+	mesh->materials[i].specular_hardness=(uint32_t)(0.51*obj_data.material_list[i]->shiny+1.5);
 	}
 delete_obj_data(&obj_data);
 return 0;
@@ -195,7 +194,7 @@ uint32_t mesh_count_primitives(mesh_t* mesh)
 return mesh->num_faces;
 }
 
-primitive_t mesh_get_primitives(mesh_t* mesh,primitive_t* primitives)
+void mesh_get_primitives(mesh_t* mesh,primitive_t* primitives)
 {
 	for(int i=0;i<mesh->num_faces;i++)
 	{

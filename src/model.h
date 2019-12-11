@@ -34,6 +34,6 @@ size_t num_materials;
 int texture_load_png(texture_t* texture,const char* filename);
 int mesh_load_obj(mesh_t* mesh,const char* filename);
 uint32_t mesh_count_primitives(mesh_t* mesh);
-primitive_t mesh_get_primitives(mesh_t* mesh,primitive_t* primitives);
+void mesh_get_primitives(mesh_t* mesh,primitive_t* primitives);
 
 #endif // MODEL_H_INCLUDED

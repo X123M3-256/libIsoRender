@@ -44,9 +44,10 @@ void texture_destroy(texture_t* texture)
 	}
 
 
-void context_init(context_t* context,light_t light,palette_t palette,float upt)
+void context_init(context_t* context,light_t* lights,uint32_t num_lights,palette_t palette,float upt)
 	{
-	context->light=light;
+	context->lights=lights;
+	context->num_lights=num_lights;
 	//Dimetric projection
 	const transform_t projection={
 	{32.0/upt		,0.0	   		,-32.0/upt,
@@ -55,6 +56,7 @@ void context_init(context_t* context,light_t light,palette_t palette,float upt)
 	 {0,0,0}
 	 };
 	context->projection=projection;
+	context->view_vector=vector3_normalize(matrix_vector(matrix_inverse(projection.matrix),vector3(0,0,-1)));
 	context->palette=palette;
 	}
 void context_rotate(context_t* context)
@@ -81,17 +83,81 @@ bool int_in_range(int32_t x,int32_t a,int32_t b)
 		else return false;
 	}
 
-
-
-vector3_t shade_fragment(light_t* light,vector3_t normal,vector3_t color,float specular_intensity,float specular_exponent)
+//Specular shading code from Blender. Not sure what it does
+float spec(float inp, int hard)  
 	{
-	float ambient_factor=0.05+light->ambient*fmax(vector3_dot(normal,vector3(0.0,0.0,-1.0)),0.0);
-	float diffuse_factor=light->diffuse*fmax(vector3_dot(normal,light->direction),0.0);
-	
-	vector3_t reflected_light_direction=vector3_sub(vector3_mult(normal,2.0*vector3_dot(light->direction,normal)),light->direction);
-	float specular_factor=specular_intensity*powf(fmax(0.0,diffuse_factor>0.0?-reflected_light_direction.z:0.0),specular_exponent);
+		if (inp>=1.0f) return 1.0f;
+		else if (inp<=0.0f) return 0.0f;
+        
+        float b1=inp*inp;
+        	if (b1<0.01f) b1= 0.01f;
+        
+		if ((hard & 1)==0)  inp= 1.0f;
+		if (hard&2)  inp*= b1;
+        b1*= b1;
+		if (hard&4)  inp*= b1;
+        b1*= b1;
+		if (hard&8)  inp*= b1;
+        b1*= b1;
+		if (hard&16) inp*= b1;
+        b1*= b1;
 
-	return vector3_add(vector3_mult(color,ambient_factor+diffuse_factor),vector3_from_scalar(specular_factor));
+		if (b1<0.001f) b1= 0.0f;
+
+		if (hard&32) inp*= b1;
+        b1*= b1;
+		if (hard&64) inp*=b1;
+        b1*= b1;
+		if (hard&128) inp*=b1;
+
+		if (b1<0.001f) b1= 0.0f;
+
+        	if (hard & 256)
+		{
+                b1*= b1;
+                inp*=b1;
+        	}
+        return inp;
+	}
+
+float cook_torr_spec(vector3_t n,vector3_t l,vector3_t v,int hard)
+	{
+        vector3_t h=vector3_normalize(vector3_add(v,l));
+
+        float nh=vector3_dot(n,h);
+        	if(nh<0.0f) return 0.0f;
+        float nv=vector3_dot(n,v);
+        	if (nv<0.0f) nv= 0.0f;
+
+        return spec(nh, hard)/(0.1f+nv);
+	}
+
+
+vector3_t shade_fragment(light_t* lights,uint32_t num_lights,vector3_t normal,vector3_t view,vector3_t color,vector3_t specular_color,uint32_t specular_hardness)
+	{
+	vector3_t output_color=vector3(0,0,0);
+		for(uint32_t i=0;i<num_lights;i++)
+		{
+			if(lights[i].type==LIGHT_HEMI)
+			{
+			float diffuse_factor=0.5*lights[i].intensity*(1+vector3_dot(normal,lights[i].direction));
+			output_color=vector3_add(vector3_mult(color,diffuse_factor),output_color);
+			}
+			else if(lights[i].type==LIGHT_DIFFUSE)
+			{
+			float diffuse_factor=lights[i].intensity*fmax(vector3_dot(normal,lights[i].direction),0.0);
+			output_color=vector3_add(vector3_mult(color,diffuse_factor),output_color);
+			}
+			else
+			{
+			float diffuse_factor=lights[i].intensity*fmax(vector3_dot(normal,lights[i].direction),0.0);
+			//vector3_t reflected_light_direction=vector3_sub(vector3_mult(normal,2.0*vector3_dot(lights[i].direction,normal)),lights[i].direction);
+			
+			float specular_factor=lights[i].intensity*cook_torr_spec(normal,lights[i].direction,view,specular_hardness);
+			output_color=vector3_add(vector3_add(vector3_mult(color,diffuse_factor),vector3_mult(specular_color,specular_factor)),output_color);	
+			}	
+		}
+	return output_color; 
 	}
 /*
 void context_draw_primitive(context_t* context,primitive_t primitive)
@@ -166,19 +232,33 @@ return coords.x>=0.0&&coords.y>=0.0&&coords.z>=0.0&&coords.x<=1.0&&coords.y<=1.0
 }
 
 
-void transform_primitives(transform_t transform,primitive_t* primitives,uint32_t num_primitives)
+void transform_primitives_generic(transform_t transform,primitive_t* primitives,uint32_t num_primitives,uint32_t preserve_normals)
 {
 matrix_t normal_matrix=matrix_transpose(matrix_inverse(transform.matrix));
 	for(int i=0;i<num_primitives;i++)
+	for(int j=0;j<3;j++)
 	{
+	primitives[i].vertices[j]=transform_vector(transform,primitives[i].vertices[j]);
+	}
+	if(!preserve_normals)
+	{
+		for(int i=0;i<num_primitives;i++)
 		for(int j=0;j<3;j++)
 		{
-		primitives[i].vertices[j]=transform_vector(transform,primitives[i].vertices[j]);
 		primitives[i].normals[j]=matrix_vector(normal_matrix,primitives[i].normals[j]);
 		}
 	}
 }
 
+void transform_primitives(transform_t transform,primitive_t* primitives,uint32_t num_primitives)
+{
+transform_primitives_generic(transform,primitives,num_primitives,0);
+}
+
+void project_primitives(transform_t transform,primitive_t* primitives,uint32_t num_primitives)
+{
+transform_primitives_generic(transform,primitives,num_primitives,1);
+}
 
 //Returns the index of the frontmost primitive intersecting the line given by X=x,Y=y, or -1 if no such primitive was found.
 int primitive_sample_point(primitive_t* primitives,uint32_t num_primitives,transform_t transform,vector2_t point,vector3_t* result_weights)
@@ -223,7 +303,7 @@ primitive_t primitive=primitives[primitive_index];
 		}
 		else color=primitive.material->color;
 
-	fragment->color=shade_fragment(&(context->light),normal,color,primitive.material->specular_intensity,primitive.material->specular_exponent);
+	fragment->color=shade_fragment(context->lights,context->num_lights,normal,context->view_vector,color,primitive.material->specular_color,primitive.material->specular_hardness);
 	fragment->region=primitive.material->region;
 	}
 	else

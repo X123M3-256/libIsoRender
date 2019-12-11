@@ -45,8 +45,8 @@ typedef struct //Texture
 	{
 	uint8_t flags;
 	uint8_t region;
-	float specular_intensity;
-	float specular_exponent;
+	uint32_t specular_hardness;
+	vector3_t specular_color;
 		union
 		{
 		texture_t texture;
@@ -55,12 +55,19 @@ typedef struct //Texture
 	}material_t;
 
 
+enum light_type
+	{
+	LIGHT_HEMI,
+	LIGHT_DIFFUSE,
+	LIGHT_SPECULAR,
+	};
+
 
 typedef struct //Light
 	{
+	uint32_t type;
 	vector3_t direction;
-	float ambient;
-	float diffuse;
+	float intensity;
 	}light_t;
 
 
@@ -84,14 +91,16 @@ fragment_t* fragments;
 
 typedef struct
 	{
-	light_t light;
+	uint32_t num_lights;
+	light_t* lights;
 	transform_t projection;
+	vector3_t view_vector;
 	palette_t palette;
 	}context_t;
 
 void texture_destroy(texture_t* texture);
 
-extern void context_init(context_t* context,light_t light,palette_t palette,float units_per_tile);
+extern void context_init(context_t* context,light_t* lights,uint32_t num_lights,palette_t palette,float upt);
 extern void context_rotate(context_t* context);
 extern void context_map(context_t* context,fragment_t (*f)(fragment_t,void*),void* data);
 //extern void context_reduce(context_t* context,int32_t (*f)(fragment_t,int32_t))
@@ -102,6 +111,7 @@ extern void context_get_depth(context_t* render,image_t* depth);
 extern void context_destroy(context_t* context);
 
 void transform_primitives(transform_t transform,primitive_t* primitives,uint32_t num_primitives);
+void project_primitives(transform_t transform,primitive_t* primitives,uint32_t num_primitives);
 
 void framebuffer_init(framebuffer_t* framebuffer,uint32_t width,uint32_t height);
 void framebuffer_from_primitives(framebuffer_t* framebuffer,context_t* context,primitive_t* primitives,uint32_t num_primitives);
