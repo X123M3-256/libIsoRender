@@ -61,7 +61,13 @@ void context_init(context_t* context,light_t* lights,uint32_t num_lights,palette
 	}
 void context_rotate(context_t* context)
 {
-context->projection=transform(matrix(-context->projection.matrix.entries[2],context->projection.matrix.entries[1],context->projection.matrix.entries[0],-context->projection.matrix.entries[5],context->projection.matrix.entries[4],context->projection.matrix.entries[3],-context->projection.matrix.entries[8],context->projection.matrix.entries[7],context->projection.matrix.entries[6]),context->projection.translation);
+matrix_t rotation=matrix(-context->projection.matrix.entries[2],context->projection.matrix.entries[1],context->projection.matrix.entries[0],-context->projection.matrix.entries[5],context->projection.matrix.entries[4],context->projection.matrix.entries[3],-context->projection.matrix.entries[8],context->projection.matrix.entries[7],context->projection.matrix.entries[6]);
+context->projection=transform(rotation,context->projection.translation);
+context->view_vector=vector3(-context->view_vector.z,context->view_vector.y,context->view_vector.x);
+	for(int i=0;i<context->num_lights;i++)
+	{
+	context->lights[i].direction=vector3(-context->lights[i].direction.z,context->lights[i].direction.y,context->lights[i].direction.x);
+	}
 }
 
 
