@@ -16,78 +16,62 @@
 #define SQRT_3 1.73205080757
 #define SQRT_6 2.44948974278
 
-
-
-void texture_init(texture_t* texture,uint16_t width,uint16_t height)
-	{
-	texture->width=width;
-	texture->height=height;
-	texture->pixels=malloc(width*height*sizeof(color_t));
-	}
-
-float wrap_coord(float coord)
-{
-return fmax(0.0,fmin(1.0,coord-floor(coord)));
-}
-
-vector3_t texture_sample(texture_t* texture,vector2_t coord)
-	{
-	uint16_t tex_x=(uint32_t)(texture->width*wrap_coord(coord.x));
-	uint16_t tex_y=(uint32_t)(texture->height*wrap_coord(coord.y));
-	assert(tex_x<texture->width&&tex_y<texture->height);
-	return texture->pixels[tex_y*texture->width+tex_x];
-	}
-
-void texture_destroy(texture_t* texture)
-	{
-	free(texture->pixels);
-	}
+matrix_t views[4]={{1,0,0,0,1,0,0,0,1},{0,0,1,0,1,0,-1,0,0},{-1,0,0,0,1,0,0,0,-1},{0,0,-1,0,1,0,1,0,0}};
 
 
 void context_init(context_t* context,light_t* lights,uint32_t num_lights,palette_t palette,float upt)
 	{
+	context->rt_device=device_init();
 	context->lights=lights;
 	context->num_lights=num_lights;
 	//Dimetric projection
-	const transform_t projection={
-	{32.0/upt		,0.0	   		,-32.0/upt,
-	 -16.0/upt	,-16.0*SQRT_6/upt	,-16.0/upt,
-	 16.0*SQRT_3/upt	,-16.0*SQRT_2/upt	,16.0*SQRT_3/upt},
-	 {0,0,0}
-	 };
+	const matrix_t projection={
+		32.0/upt		,0.0	   		,-32.0/upt,
+		 -16.0/upt	,-16.0*SQRT_6/upt	,-16.0/upt,
+		 16.0*SQRT_3/upt	,-16.0*SQRT_2/upt	,16.0*SQRT_3/upt
+		};
 	context->projection=projection;
-	context->view_vector=vector3_normalize(matrix_vector(matrix_inverse(projection.matrix),vector3(0,0,-1)));
 	context->palette=palette;
 	}
-void context_rotate(context_t* context)
+
+void context_begin_render(context_t* context)
 {
-matrix_t rotation=matrix(-context->projection.matrix.entries[2],context->projection.matrix.entries[1],context->projection.matrix.entries[0],-context->projection.matrix.entries[5],context->projection.matrix.entries[4],context->projection.matrix.entries[3],-context->projection.matrix.entries[8],context->projection.matrix.entries[7],context->projection.matrix.entries[6]);
-context->projection=transform(rotation,context->projection.translation);
-context->view_vector=vector3(-context->view_vector.z,context->view_vector.y,context->view_vector.x);
-	for(int i=0;i<context->num_lights;i++)
-	{
-	context->lights[i].direction=vector3(-context->lights[i].direction.z,context->lights[i].direction.y,context->lights[i].direction.x);
-	}
+scene_init(&(context->rt_scene),context->rt_device);
 }
 
-
-int32_t int_wrap(int32_t x,int32_t wrap)
+vertex_t linear_transform(vector3_t vertex,vector3_t normal,void* matptr)
 {
-	if(x>=0)return x-(wrap*(x/wrap));
-	else return x+(wrap*(1+x/wrap));
+transform_t transform=*((transform_t*)matptr);
+vertex_t out;
+out.vertex=transform_vector(transform,vertex);
+out.normal=vector3_normalize(matrix_vector(transform.matrix,normal));
+return out;
 }
-int32_t clamp(int32_t x,int32_t a,int32_t b)
-	{
-		if(x<a)return a;
-		else if(x>b)return b;
-		else return x;
-	}
-bool int_in_range(int32_t x,int32_t a,int32_t b)
-	{
-		if(b>=a&&x>=a&&x<b)return true;
-		else if(b<a&&x<=a&&x>b)return true;
-		else return false;
-	}
+
+void context_add_model_transformed(context_t* context,mesh_t* mesh,vertex_t (*transform)(vector3_t,vector3_t,void*),void* data)
+{
+scene_add_model(&(context->rt_scene),mesh,transform,data);
+}
+
+void context_add_model(context_t* context,mesh_t* mesh,transform_t transform)
+{
+scene_add_model(&(context->rt_scene),mesh,&linear_transform,&transform);
+}
+
+void context_finalize_render(context_t* context)
+{
+scene_finalize(&(context->rt_scene));
+}
+
+void context_end_render(context_t* context)
+{
+scene_destroy(&(context->rt_scene));
+}
+
+void context_destroy(context_t* context)
+{
+device_destroy(context->rt_device);
+}
 
 //Specular shading code from Blender. Not sure what it does
 float spec(float inp, int hard)  
@@ -139,7 +123,7 @@ float cook_torr_spec(vector3_t n,vector3_t l,vector3_t v,int hard)
 	}
 
 
-vector3_t shade_fragment(light_t* lights,uint32_t num_lights,vector3_t normal,vector3_t view,vector3_t color,vector3_t specular_color,uint32_t specular_hardness)
+vector3_t shade_fragment(vector3_t normal,vector3_t view,vector3_t color,vector3_t specular_color,uint32_t specular_hardness,light_t* lights,uint32_t num_lights)
 	{
 	vector3_t output_color=vector3(0,0,0);
 		for(uint32_t i=0;i<num_lights;i++)
@@ -165,163 +149,35 @@ vector3_t shade_fragment(light_t* lights,uint32_t num_lights,vector3_t normal,ve
 		}
 	return output_color; 
 	}
-/*
-void context_draw_primitive(context_t* context,primitive_t primitive)
+
+int scene_sample_point(scene_t* scene,vector2_t point,matrix_t camera,light_t* lights,uint32_t num_lights,fragment_t* fragment)
+{
+ray_hit_t hit;
+vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
+	if(scene_trace_ray(scene,matrix_vector(camera,vector3(point.x,point.y,-128)),vector3_mult(view_vector,-1),&hit))
 	{
-	transform_t view=context->projection;
-	vector3_t tv[3]={transform_vector(view,primitive.vertices[0]),transform_vector(view,primitive.vertices[1]),transform_vector(view,primitive.vertices[2])};
-	
-	int32_t x_min=clamp((int32_t)(floor(fmin(fmin(tv[0].x,tv[1].x),tv[2].x))+floor(context->width/2.0)),0,context->width-1);
-	int32_t x_max=clamp((int32_t)(ceil(fmax(fmax(tv[0].x,tv[1].x),tv[2].x))+ceil(context->width/2.0)),0,context->width-1);
-	int32_t y_min=clamp((int32_t)(floor(fmin(fmin(tv[0].y,tv[1].y),tv[2].y))+floor(context->height/2.0)),0,context->height-1);
-	int32_t y_max=clamp((int32_t)(ceil(fmax(fmax(tv[0].y,tv[1].y),tv[2].y))+ceil(context->height/2.0)),0,context->height-1);
-		for(int32_t y=y_min;y<=y_max;y++)
-		for(int32_t x=x_min;x<=x_max;x++)
-		{
-		//Do not factorize
-	float point_x=(float)x-((float)context->width+1.0)/2.0;
-	float point_y=(float)y-((float)context->height+1.0)/2.0;
-	float denominator=(tv[1].y-tv[2].y)*(tv[0].x-tv[2].x)+(tv[2].x-tv[1].x)*(tv[0].y-tv[2].y);
-	float a=((tv[1].y-tv[2].y)*(point_x-tv[2].x)+(tv[2].x-tv[1].x)*(point_y-tv[2].y))/denominator;
-	float b=((tv[2].y-tv[0].y)*(point_x-tv[2].x)+(tv[0].x-tv[2].x)*(point_y-tv[2].y))/denominator;
-	float c=1.0-a-b;
-		if(a>=0.0&&b>=0.0&&c>=0.0&&a<=1.0&&b<=1.0&&c<=1.0)
-		{
-		float depth=a*tv[0].z+b*tv[1].z+c*tv[2].z;
-			if(depth<context->fragments[x+y*context->width].depth)
-			{
-			//Interpolate normal
-			vector3_t normal=vector3_normalize(vector3_add(vector3_add(vector3_mult(primitive.normals[0],a),vector3_mult(primitive.normals[1],b)),vector3_mult(primitive.normals[2],c)));
-			//Interpolate UV
-			vector2_t tex_coord;
-			tex_coord.x=primitive.uvs[0].x*a+primitive.uvs[1].x*b+primitive.uvs[2].x*c;
-			tex_coord.y=primitive.uvs[0].y*a+primitive.uvs[1].y*b+primitive.uvs[2].y*c;
+	mesh_t* mesh=scene->meshes[hit.mesh_index];
+	face_t* face=mesh->faces+hit.face_index;
+	material_t* material=mesh->materials+face->material;
 
-			vector3_t color;
-				if(primitive.material->flags&MATERIAL_HAS_TEXTURE)color=texture_sample(&(primitive.material->texture),tex_coord);
-				else color=primitive.material->color;
-			context->fragments[x+y*context->width].color=shade_fragment(&(context->light),normal,color);
-			context->fragments[x+y*context->width].depth=depth;
-			context->fragments[x+y*context->width].region=primitive.material->region;
-			}
-		}
-	}
-}
+	//Check if this is a mask
+		if(material->flags&MATERIAL_IS_MASK)return 0;
 
-void context_destroy(context_t* context)
-	{
-	free(context->fragments);
-	}
-
-
-bool context_compare_regions(context_t* context,uint32_t x1,uint32_t y1,uint32_t x2,uint32_t y2)
-{
-return context_index(context,x1,y1).region==context_index(context,x2,y2).region;
-}
-*/
-
-
-//Given Cartesian coordinates of a point and a reference triangle, compute the barycentric coordinates
-vector3_t compute_barycentric_coordinates(vector2_t point,vector3_t* tri_points)
-{
-float denominator=(tri_points[1].y-tri_points[2].y)*(tri_points[0].x-tri_points[2].x)+(tri_points[2].x-tri_points[1].x)*(tri_points[0].y-tri_points[2].y);
-float a=((tri_points[1].y-tri_points[2].y)*(point.x-tri_points[2].x)+(tri_points[2].x-tri_points[1].x)*(point.y-tri_points[2].y))/denominator;	
-float b=((tri_points[2].y-tri_points[0].y)*(point.x-tri_points[2].x)+(tri_points[0].x-tri_points[2].x)*(point.y-tri_points[2].y))/denominator;
-float c=1.0-a-b;
-return vector3(a,b,c);
-}
-
-//Given the barycentric coordinates of a point, test if the point is inside the triangle
-int internal_point(vector3_t coords)
-{
-return coords.x>=0.0&&coords.y>=0.0&&coords.z>=0.0&&coords.x<=1.0&&coords.y<=1.0&&coords.z<=1.0;
-}
-
-
-void transform_primitives_generic(transform_t transform,primitive_t* primitives,uint32_t num_primitives,uint32_t preserve_normals)
-{
-matrix_t normal_matrix=matrix_transpose(matrix_inverse(transform.matrix));
-	for(int i=0;i<num_primitives;i++)
-	for(int j=0;j<3;j++)
-	{
-	primitives[i].vertices[j]=transform_vector(transform,primitives[i].vertices[j]);
-	}
-	if(!preserve_normals)
-	{
-		for(int i=0;i<num_primitives;i++)
-		for(int j=0;j<3;j++)
-		{
-		primitives[i].normals[j]=matrix_vector(normal_matrix,primitives[i].normals[j]);
-		}
-	}
-}
-
-void transform_primitives(transform_t transform,primitive_t* primitives,uint32_t num_primitives)
-{
-transform_primitives_generic(transform,primitives,num_primitives,0);
-}
-
-void project_primitives(transform_t transform,primitive_t* primitives,uint32_t num_primitives)
-{
-transform_primitives_generic(transform,primitives,num_primitives,1);
-}
-
-//Returns the index of the frontmost primitive intersecting the line given by X=x,Y=y, or -1 if no such primitive was found.
-int primitive_sample_point(primitive_t* primitives,uint32_t num_primitives,transform_t transform,vector2_t point,vector3_t* result_weights)
-{
-int primitive_index=-1;
-float current_depth;
-	for(uint32_t i=0;i<num_primitives;i++)
-	{
-	primitive_t primitive=primitives[i];
-	vector3_t weights=compute_barycentric_coordinates(point,primitive.vertices);
-		if(internal_point(weights))
-		{
-		float depth=vector3_dot(weights,vector3(primitive.vertices[0].z,primitive.vertices[1].z,primitive.vertices[2].z));
-			if(primitive_index==-1||depth<current_depth)
-			{
-			primitive_index=i;
-			*result_weights=weights;
-			current_depth=depth;	
-			}
-		}
-
-	}
-return primitive_index;
-}
-int context_sample_point(context_t* context,primitive_t* primitives,uint32_t num_primitives,vector2_t point,fragment_t* fragment)
-{
-vector3_t weights;
-int primitive_index=primitive_sample_point(primitives,num_primitives,context->projection,point,&weights);
-	if(primitive_index==-1)return 0;
-primitive_t primitive=primitives[primitive_index];
-
-	if(primitive.material)
-	{
-	//Compute normal vector
-	vector3_t normal=vector3_normalize(vector3_add(vector3_add(vector3_mult(primitive.normals[0],weights.x),vector3_mult(primitive.normals[1],weights.y)),vector3_mult(primitive.normals[2],weights.z)));
 	//Compute surface color
 	vector3_t color;
-		if(primitive.material->flags&MATERIAL_HAS_TEXTURE)
+		if(material->flags&MATERIAL_HAS_TEXTURE)
 		{
-		vector2_t tex_coord=vector2_add(vector2_add(vector2_mult(primitive.uvs[0],weights.x),vector2_mult(primitive.uvs[1],weights.y)),vector2_mult(primitive.uvs[2],weights.z));
-		color=texture_sample(&(primitive.material->texture),tex_coord);
+		vector2_t tex_coord=vector2_add(vector2_add(vector2_mult(mesh->uvs[face->indices[0]],1.0-hit.u-hit.v),vector2_mult(mesh->uvs[face->indices[1]],hit.u)),vector2_mult(mesh->uvs[face->indices[2]],hit.v));
+		color=texture_sample(&(material->texture),tex_coord);
 		}
-		else color=primitive.material->color;
+		else color=material->color;
 
-	fragment->color=shade_fragment(context->lights,context->num_lights,normal,context->view_vector,color,primitive.material->specular_color,primitive.material->specular_hardness);
-	fragment->region=primitive.material->region;
+	fragment->color=shade_fragment(hit.normal,view_vector,color,material->specular_color,material->specular_hardness,lights,num_lights);
+	fragment->region=material->region;
+	return 1;
 	}
-	else
-	{
-	fragment->color=vector3(0.0,0.0,0.0);
-	fragment->region=FRAGMENT_UNUSED;
-	}
-return 1;
+return 0;
 }
-
-
-
 
 rect_t rect(int xl,int xu,int yl,int yu)
 {
@@ -334,15 +190,23 @@ return rect((int)fmin(r.x_lower,floor(x)),(int)fmax(r.x_upper,ceil(x)),
 	    (int)fmin(r.y_lower,floor(y)),(int)fmax(r.y_upper,ceil(y)));
 }
 
-rect_t primitives_get_bounds(primitive_t* primitives,uint32_t num_primitives)
+rect_t scene_get_bounds(scene_t* scene,matrix_t camera)
 {
-if(num_primitives==0)return rect(0,1,0,1);
-rect_t bounds=rect((int)floor(primitives[0].vertices[0].x),(int)ceil(primitives[0].vertices[0].x),(int)floor(primitives[0].vertices[0].y),(int)ceil(primitives[0].vertices[0].y)
-);
-	for(int i=0;i<num_primitives;i++)
-	for(int j=0;j<3;j++)
+vector3_t bounding_points[8]={
+vector3(scene->x_min,scene->y_min,scene->z_min),
+vector3(scene->x_max,scene->y_min,scene->z_min),
+vector3(scene->x_min,scene->y_max,scene->z_min),
+vector3(scene->x_max,scene->y_max,scene->z_min),
+vector3(scene->x_min,scene->y_min,scene->z_max),
+vector3(scene->x_max,scene->y_min,scene->z_max),
+vector3(scene->x_min,scene->y_max,scene->z_max),
+vector3(scene->x_max,scene->y_max,scene->z_max)};
+
+rect_t bounds=rect((int)floor(bounding_points[0].x),(int)ceil(bounding_points[0].x),(int)floor(bounding_points[0].y),(int)ceil(bounding_points[0].y));
+	for(int j=0;j<8;j++)
 	{
-	bounds=rect_enclose_point(bounds,primitives[i].vertices[j].x,primitives[i].vertices[j].y);
+	vector3_t screen_point=matrix_vector(camera,bounding_points[j]);
+	bounds=rect_enclose_point(bounds,screen_point.x,screen_point.y);
 	}
 return bounds;
 }
@@ -353,6 +217,8 @@ return bounds;
 
 rect_t framebuffer_get_bounds(framebuffer_t* framebuffer)
 {
+//printf("%d %d\n",framebuffer->width,framebuffer->height);
+//return rect(0,framebuffer->width,0,framebuffer->height);
 int found_pixel=0;
 rect_t bounds;
 	for(uint32_t y=0;y<framebuffer->height;y++)
@@ -372,50 +238,37 @@ rect_t bounds;
 	if(!found_pixel)return rect(0,0,0,0);
 	else return bounds;
 }
-
-void framebuffer_from_primitives(framebuffer_t* framebuffer,context_t* context,primitive_t* primitives,uint32_t num_primitives)
+void image_from_framebuffer(image_t* image,framebuffer_t* framebuffer,palette_t* palette)
 {
-rect_t bounds=primitives_get_bounds(primitives,num_primitives);
-framebuffer->width=bounds.x_upper-bounds.x_lower+1;
-framebuffer->height=bounds.y_upper-bounds.y_lower;
-framebuffer->offset=vector2((float)(bounds.x_lower)-0.5,(float)(bounds.y_lower));
-framebuffer->fragments=malloc(framebuffer->width*framebuffer->height*sizeof(fragment_t));
-	for(int i=0;i<framebuffer->width*framebuffer->height;i++)
+rect_t bounding_box=framebuffer_get_bounds(framebuffer);
+image->width=1+bounding_box.x_upper-bounding_box.x_lower;
+image->height=1+bounding_box.y_upper-bounding_box.y_lower;
+image->x_offset=bounding_box.x_lower+floor(framebuffer->offset.x);
+image->y_offset=bounding_box.y_lower+floor(framebuffer->offset.y)-1;//1 compensates for error not sure why it's needed TODO work out why it's needed
+image->pixels=calloc(image->width*image->height,sizeof(uint8_t));
+
+	for(int y=bounding_box.y_lower;y<=bounding_box.y_upper;y++)
 	{
-	framebuffer->fragments[i].color=vector3(0.0,0.0,0.0);
-	framebuffer->fragments[i].region=FRAGMENT_UNUSED;
-	}
-
-
-
-	for(int y=0;y<framebuffer->height;y++)
-	for(int x=0;x<framebuffer->width;x++)
-	{
-	vector2_t sample_point=vector2_add(vector2(x,y),framebuffer->offset);
-	fragment_t centre_sample;
-		if(context_sample_point(context,primitives,num_primitives,sample_point,&centre_sample))
+		for(int x=bounding_box.x_lower;x<=bounding_box.x_upper;x++)
 		{
-		vector2_t subsample_points[4]={{-0.25,-0.25},{0.25,-0.25},{-0.25,0.25},{0.25,0.25}};
-		vector3_t subsample_total=vector3(0.0,0.0,0.0);
-		float num_subsamples=0.0;
-			for(int i=0;i<4;i++)
+		fragment_t fragment=FRAMEBUFFER_INDEX(framebuffer,x,y);
+			if(fragment.region!=FRAGMENT_UNUSED)
 			{
-			fragment_t subsample;
-				if(context_sample_point(context,primitives,num_primitives,vector2_add(sample_point,subsample_points[i]),&subsample)&&subsample.region==centre_sample.region)
-				{
-				subsample_total=vector3_add(subsample_total,subsample.color);
-				num_subsamples+=1.0;
+			vector3_t error;
+			image->pixels[(x-bounding_box.x_lower)+(y-bounding_box.y_lower)*image->width]=palette_get_nearest(palette,fragment.region&REGION_MASK,fragment.color,&error);
+						
+			//Distribute error onto neighbouring points
+			int points[4][2]={{x+1,y},{x-1,y+1},{x,y+1},{x+1,y+1}};
+			float weights[4]={7.0/16.0,3.0/16.0,5.0/16.0,1.0/16.0};
+				for(int i=0;i<4;i++)
+				if(points[i][0]>=0&&points[i][0]<framebuffer->width-1&&points[i][1]>=0&&points[i][1]<framebuffer->height-1&&
+				   FRAMEBUFFER_INDEX(framebuffer,x,y).region==FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).region)
+				{		
+				FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).color=vector3_add(vector3_mult(error,weights[i]),FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).color);
 				}
 			}
-		framebuffer->fragments[x+y*framebuffer->width].color=num_subsamples!=0.0?vector3_mult(subsample_total,1.0/num_subsamples):centre_sample.color;
-		framebuffer->fragments[x+y*framebuffer->width].region=centre_sample.region;
 		}
 	}
-}
-
-
-void framebuffer_destroy(framebuffer_t* framebuffer)
-{
 free(framebuffer->fragments);
 }
 
@@ -462,83 +315,63 @@ fwrite(bitmap_header,1,54,file);
 
 fclose(file);
 }
-void image_from_framebuffer(image_t* image,framebuffer_t* framebuffer,palette_t* palette)
-{
-rect_t bounding_box=framebuffer_get_bounds(framebuffer);
-image->width=1+bounding_box.x_upper-bounding_box.x_lower;
-image->height=1+bounding_box.y_upper-bounding_box.y_lower;
-image->x_offset=bounding_box.x_lower+floor(framebuffer->offset.x);
-image->y_offset=bounding_box.y_lower+floor(framebuffer->offset.y)-1;//1 compensates for error not sure why it's needed TODO work out why it's needed
-image->pixels=calloc(image->width*image->height,sizeof(uint8_t));
 
-	for(int y=bounding_box.y_lower;y<=bounding_box.y_upper;y++)
+void context_render_view(context_t* context,matrix_t view,image_t* image)
+{
+matrix_t camera=matrix_mult(context->projection,view);
+
+
+rect_t bounds=scene_get_bounds(&(context->rt_scene),camera);
+
+framebuffer_t framebuffer;
+framebuffer.width=bounds.x_upper-bounds.x_lower+1;
+framebuffer.height=bounds.y_upper-bounds.y_lower;
+framebuffer.offset=vector2((float)(bounds.x_lower)-0.5,(float)(bounds.y_lower));
+framebuffer.fragments=malloc(framebuffer.width*framebuffer.height*sizeof(fragment_t));
+
+
+//Transform lights for view
+light_t transformed_lights[context->num_lights];
+matrix_t view_inverse=matrix_inverse(view);
+	for(int i=0;i<context->num_lights;i++)
 	{
-		for(int x=bounding_box.x_lower;x<=bounding_box.x_upper;x++)
+	transformed_lights[i].type=context->lights[i].type;
+	transformed_lights[i].direction=matrix_vector(view_inverse,context->lights[i].direction);
+	transformed_lights[i].intensity=context->lights[i].intensity;
+	}
+
+
+//Render image
+	for(int i=0;i<framebuffer.width*framebuffer.height;i++)
+	{
+	framebuffer.fragments[i].color=vector3(0.0,0.0,0.0);
+	framebuffer.fragments[i].region=FRAGMENT_UNUSED;
+	}
+
+matrix_t camera_inverse=matrix_inverse(camera);
+	for(int y=0;y<framebuffer.height;y++)
+	for(int x=0;x<framebuffer.width;x++)
+	{
+	vector2_t sample_point=vector2_add(vector2(x,y),framebuffer.offset);
+	fragment_t centre_sample;
+		if(scene_sample_point(&(context->rt_scene),sample_point,camera_inverse,transformed_lights,context->num_lights,&centre_sample))
 		{
-		fragment_t fragment=FRAMEBUFFER_INDEX(framebuffer,x,y);
-			if(fragment.region!=FRAGMENT_UNUSED)
+		vector2_t subsample_points[4]={{-0.25,-0.25},{0.25,-0.25},{-0.25,0.25},{0.25,0.25}};
+		vector3_t subsample_total=vector3(0.0,0.0,0.0);
+		float num_subsamples=0.0;
+			for(int i=0;i<4;i++)
 			{
-			vector3_t error;
-			image->pixels[(x-bounding_box.x_lower)+(y-bounding_box.y_lower)*image->width]=palette_get_nearest(palette,fragment.region&REGION_MASK,fragment.color,&error);
-						
-			//Distribute error onto neighbouring points
-			//int points[4][2]={{x+1,y},{x-1,y+1},{x,y+1},{x+1,y+1}};
-			//float weights[4]={7.0/16.0,3.0/16.0,5.0/16.0,1.0/16.0};
-			//	for(int i=0;i<4;i++)
-			//	if(points[i][0]>=0&&points[i][0]<framebuffer->width-1&&points[i][1]>=0&&points[i][1]<framebuffer->height-1&&
-			//	   FRAMEBUFFER_INDEX(framebuffer,x,y).region==FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).region)
-			//	{		
-			//	FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).color=vector3_add(vector3_mult(error,weights[i]),FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).color);
-			//	}
+			fragment_t subsample;
+				if(scene_sample_point(&(context->rt_scene),vector2_add(sample_point,subsample_points[i]),camera_inverse,transformed_lights,context->num_lights,&subsample)&&subsample.region==centre_sample.region)
+				{
+				subsample_total=vector3_add(subsample_total,subsample.color);
+				num_subsamples+=1.0;
+				}
 			}
+		framebuffer.fragments[x+y*framebuffer.width].color=num_subsamples!=0.0?vector3_mult(subsample_total,1.0/num_subsamples):centre_sample.color;
+		framebuffer.fragments[x+y*framebuffer.width].region=centre_sample.region;
 		}
 	}
-free(framebuffer->fragments);
+//Convert to indexed color
+image_from_framebuffer(image,&framebuffer,&(context->palette));
 }
-
-void image_save_bmp(image_t* image,palette_t* palette,char* filename)
-{
-int padding=(4-(image->width*3)%4)%4;
-
-int data_size=image->height*(image->width*3+padding);
-
-uint8_t bitmap_header[54];
-memset(bitmap_header,0,54);
-
-bitmap_header[0]='B';
-bitmap_header[1]='M';
-*((uint32_t*)(bitmap_header+2))=54+data_size;
-*((uint32_t*)(bitmap_header+10))=54;
-*((uint32_t*)(bitmap_header+14))=40;
-*((uint32_t*)(bitmap_header+18))=image->width;
-*((uint32_t*)(bitmap_header+22))=image->height;
-*((uint16_t*)(bitmap_header+26))=1;
-*((uint16_t*)(bitmap_header+28))=24;
-*((uint32_t*)(bitmap_header+38))=2834;
-*((uint32_t*)(bitmap_header+42))=2834;
-
-
-FILE* file=fopen(filename,"wb");
-	if(file==NULL)
-	{
-	printf("File open failed %d\n",errno);
-	return;
-	}
-
-fwrite(bitmap_header,1,54,file);
-
-	for(int32_t y=image->height-1;y>=0;y--)
-	{
-		for(uint32_t x=0;x<image->width;x++)
-		{
-		color_t color=palette->colors[image->pixels[y*image->width+x]];
-		fputc(color.b,file);
-		fputc(color.g,file);
-		fputc(color.r,file);
-		}
-		for(uint32_t k=0;k<padding;k++)fputc(0,file);
-	}
-
-fclose(file);
-}
-

@@ -3,12 +3,19 @@
 #include <assert.h>
 #include <string.h>
 #include <png.h>
-#include "objLoader/obj_parser.h"
+#include <assimp/cimport.h>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
 #include "model.h"
-
+#include "palette.h"
 #define DEBUG
 
-
+void texture_init(texture_t* texture,uint16_t width,uint16_t height)
+	{
+	texture->width=width;
+	texture->height=height;
+	texture->pixels=malloc(width*height*sizeof(color_t));
+	}
 
 int texture_load_png(texture_t* texture,const char* filename)
 {
@@ -77,151 +84,177 @@ fclose(fp);
 return 0;
 }
 
-int mesh_load_obj(mesh_t* mesh,const char* filename)
+float wrap_coord(float coord)
 {
-obj_scene_data obj_data;
-	if (!parse_obj_scene(&obj_data, filename))
+return fmax(0.0,fmin(1.0,coord-floor(coord)));
+}
+
+vector3_t texture_sample(texture_t* texture,vector2_t coord)
 	{
+	uint16_t tex_x=(uint32_t)(texture->width*wrap_coord(coord.x));
+	uint16_t tex_y=(uint32_t)(texture->height*wrap_coord(coord.y));
+	assert(tex_x<texture->width&&tex_y<texture->height);
+	return texture->pixels[tex_y*texture->width+tex_x];
+	}
+
+void texture_destroy(texture_t* texture)
+	{
+	free(texture->pixels);
+	}
+
+
+
+
+int mesh_load(mesh_t* output,const char* filename)
+{
+const struct aiScene* scene = aiImportFile(filename,aiProcess_Triangulate|aiProcess_JoinIdenticalVertices|aiProcess_GenNormals);
+
+	if(!scene)
+	{
+	printf("Importing file \"%s\" failed with error: %s\n",filename,aiGetErrorString());
 	return 1;
 	}
-	
-// Count vertices
-mesh->num_vertices = obj_data.vertex_count;
-mesh->num_normals = obj_data.vertex_normal_count;
-mesh->num_faces=obj_data.face_count;
-mesh->num_uvs=obj_data.vertex_texture_count;
-mesh->num_materials=obj_data.material_count;
-// Allocate arrays
-mesh->vertices = malloc(mesh->num_vertices*sizeof(vector3_t));
-mesh->normals = malloc(mesh->num_normals*sizeof(vector3_t));
-mesh->uvs=malloc(mesh->num_uvs*sizeof(vector2_t));
-mesh->faces = malloc(mesh->num_faces*sizeof(face_t));
-mesh->materials=malloc(mesh->num_materials*sizeof(material_t));
 
-	//Load vertices
-	for (int i=0;i<mesh->num_vertices;i++)
+
+output->num_materials=scene->mNumMaterials;
+output->materials=malloc(scene->mNumMaterials*sizeof(material_t));
+
+	for(uint32_t i=0;i<scene->mNumMaterials;i++)
 	{
-	mesh->vertices[i].x=obj_data.vertex_list[i]->e[0];
-	mesh->vertices[i].y=obj_data.vertex_list[i]->e[1];
-	mesh->vertices[i].z=-obj_data.vertex_list[i]->e[2];
-	}
-	//Load normals
-	for (int i=0;i<mesh->num_normals;i++)
-	{
-	mesh->normals[i].x=obj_data.vertex_normal_list[i]->e[0];
-	mesh->normals[i].y=obj_data.vertex_normal_list[i]->e[1];
-	mesh->normals[i].z=-obj_data.vertex_normal_list[i]->e[2];
-	}
-	//Load uvs
-	for (int i=0;i<mesh->num_uvs;i++)
-	{
-	mesh->uvs[i].x=obj_data.vertex_texture_list[i]->e[0];
-	mesh->uvs[i].y=obj_data.vertex_texture_list[i]->e[1];
-	}
-	//Load faces
-	for (int i=0;i<mesh->num_faces;i++) 
-	{
-	mesh->faces[i].material= obj_data.face_list[i]->material_index;
-		for (int j=0;j<3;j++) 
+	output->materials[i].flags=0;		
+	output->materials[i].region=0;
+	output->materials[i].color=vector3(0.5,0.5,0.5);		
+	output->materials[i].specular_color=vector3(0.5,0.5,0.5);		
+	output->materials[i].specular_hardness=50;
+	
+	const struct aiMaterial* mat=scene->mMaterials[i];
+
+	//Check for remappable materials
+	struct aiString name;
+		if(aiGetMaterialString(mat,AI_MATKEY_NAME,&name)==AI_SUCCESS)
 		{
-		mesh->faces[i].vertices[j] = obj_data.face_list[i]->vertex_index[j];
-		mesh->faces[i].normals[j] = obj_data.face_list[i]->normal_index[j];
-		mesh->faces[i].uvs[j] = obj_data.face_list[i]->texture_index[j];
-		} 
-	}
-	//Load materials
-	for(int i=0;i<mesh->num_materials;i++)
-	{
-	mesh->materials[i].flags=0;
-	mesh->materials[i].region=0;
-		if(strstr(obj_data.material_list[i]->name,"Remap1")!=NULL)
-		{
-		mesh->materials[i].flags|=MATERIAL_IS_REMAPPABLE;
-		mesh->materials[i].region=1;
-		}
-		else if(strstr(obj_data.material_list[i]->name,"Remap2")!=NULL)
-		{
-		mesh->materials[i].flags|=MATERIAL_IS_REMAPPABLE;
-		mesh->materials[i].region=2;
-		}
-		if(obj_data.material_list[i]->texture_filename[0]==0)
-		{
-		mesh->materials[i].color=vector3(obj_data.material_list[i]->diff[0],obj_data.material_list[i]->diff[1],obj_data.material_list[i]->diff[2]);
-		}
-		else
-		{
-		mesh->materials[i].flags|=MATERIAL_HAS_TEXTURE;
-			if(texture_load_png(&(mesh->materials[i].texture),obj_data.material_list[i]->texture_filename))
+			if(strstr(name.data,"Remap1")!=NULL)
 			{
-			printf("Failed to load texture \"%s\"\n",obj_data.material_list[i]->texture_filename);
-			free(mesh->vertices);
-			free(mesh->normals);
-			free(mesh->faces);
-			free(mesh->materials);
+			output->materials[i].flags|=MATERIAL_IS_REMAPPABLE;
+			output->materials[i].region=1;
+			}
+			else if(strstr(name.data,"Remap2")!=NULL)
+			{
+			output->materials[i].flags|=MATERIAL_IS_REMAPPABLE;
+			output->materials[i].region=2;
+			}		
+			else if(strstr(name.data,"Mask")!=NULL)
+			{
+			output->materials[i].flags|=MATERIAL_IS_MASK;
+			output->materials[i].region=1;
+			}
+		//printf("%s\n",name.data);
+		}		
+
+	struct aiColor4D diffuse;
+	struct aiString texture_path;
+		if(aiGetMaterialString(mat,AI_MATKEY_TEXTURE(aiTextureType_DIFFUSE,0),&texture_path)==AI_SUCCESS)
+		{
+		output->materials[i].flags|=MATERIAL_HAS_TEXTURE;
+			if(texture_load_png(&(output->materials[i].texture),texture_path.data))
+			{
+			printf("Failed to load texture \"%s\"\n",texture_path.data);
+			free(output->vertices);
+			free(output->normals);
+			free(output->faces);
+			free(output->materials);
 			//TODO free any textures already loaded	
-			delete_obj_data(&obj_data);
+			aiReleaseImport(scene);
 			return 1;
 			}
+		//printf("%s\n",texture_path.data);
 		}
-	mesh->materials[i].specular_color=vector3(obj_data.material_list[i]->spec[0],obj_data.material_list[i]->spec[1],obj_data.material_list[i]->spec[2]);
-	mesh->materials[i].specular_hardness=(uint32_t)(0.51*obj_data.material_list[i]->shiny+1.5);
+		else if(aiGetMaterialColor(mat,AI_MATKEY_COLOR_DIFFUSE,&diffuse)==AI_SUCCESS)
+		{
+		output->materials[i].color=vector3(diffuse.r,diffuse.g,diffuse.b);
+		//printf("%f,%f,%f\n",diffuse.r,diffuse.g,diffuse.b);
+		}
+
+	struct aiColor4D specular;
+		if(aiGetMaterialColor(mat,AI_MATKEY_COLOR_SPECULAR,&specular)==AI_SUCCESS)
+		{
+		output->materials[i].specular_color=vector3(specular.r,specular.g,specular.b);
+		float specular_strength;
+			if(aiGetMaterialFloatArray(mat,AI_MATKEY_SHININESS_STRENGTH,&specular_strength,NULL)==AI_SUCCESS)
+			{
+			output->materials[i].specular_color=vector3_mult(output->materials[i].specular_color,specular_strength);
+			}
+		//printf("%f,%f,%f\n",specular.r,specular.g,specular.b);
+		}
+
+	float specular_exponent;
+		if(aiGetMaterialFloatArray(mat,AI_MATKEY_SHININESS,&specular_exponent,NULL)==AI_SUCCESS)
+		{
+		output->materials[i].specular_hardness=(uint32_t)(0.51*specular_exponent+1.5);
+		//printf("%d\n",output->materials[i].specular_hardness);
+		}
 	}
-delete_obj_data(&obj_data);
+
+//Count vertices and faces in scene
+output->num_vertices=0;
+output->num_faces=0;
+
+	for(uint32_t j=0;j<scene->mNumMeshes;j++)
+	{
+	output->num_vertices+=scene->mMeshes[j]->mNumVertices;
+	output->num_faces+=scene->mMeshes[j]->mNumFaces;
+	}
+
+//TODO detect if UVs are not used and do not load them
+output->vertices=malloc(output->num_vertices*sizeof(vector3_t));
+output->normals=malloc(output->num_vertices*sizeof(vector3_t));
+output->uvs=malloc(output->num_vertices*sizeof(vector2_t));
+output->faces=malloc(output->num_faces*sizeof(face_t));
+
+uint32_t mesh_start_vertex=0;	
+uint32_t mesh_start_face=0;
+	
+	for(uint32_t j=0;j<scene->mNumMeshes;j++)
+	{
+	const struct aiMesh* mesh=scene->mMeshes[j];
+	assert(mesh->mNormals);
+	
+		for(uint32_t i=0;i<mesh->mNumVertices;i++)
+		{
+		output->vertices[mesh_start_vertex+i]=vector3(mesh->mVertices[i].x,mesh->mVertices[i].y,mesh->mVertices[i].z);
+		output->normals[mesh_start_vertex+i]=vector3(mesh->mNormals[i].x,mesh->mNormals[i].y,mesh->mNormals[i].z);
+			if(mesh->mTextureCoords[0])
+			{
+			output->uvs[mesh_start_vertex+i]=vector2(mesh->mTextureCoords[0][i].x,mesh->mTextureCoords[0][i].y);
+			}
+			else output->uvs[mesh_start_vertex+i]=vector2(0.0,0.0);
+		}
+
+		for(uint32_t i=0;i<mesh->mNumFaces;i++)
+		{
+		assert(mesh->mFaces[i].mNumIndices==3);
+		output->faces[mesh_start_face+i].material=mesh->mMaterialIndex;
+			for(uint32_t j=0;j<3;j++)output->faces[mesh_start_face+i].indices[j]=mesh_start_vertex+mesh->mFaces[i].mIndices[j];
+		}
+	mesh_start_vertex+=mesh->mNumVertices;
+	mesh_start_face+=mesh->mNumFaces;
+	}
+aiReleaseImport(scene);
 return 0;
 }
 
-void mesh_check_invariants(mesh_t* mesh)
-{
-//Check faces
-	for(int i=0;i<mesh->num_faces;i++)
-	{
-	face_t* face=mesh->faces+i;
-		for(int j=0;j<3;j++)
-		{
-		assert(face->vertices[j]>=0&&face->vertices[j]<=mesh->num_vertices);
-		assert(face->normals[j]>=0&&face->normals[j]<=mesh->num_normals);
-		assert(face->uvs[j]>=0&&face->uvs[j]<=mesh->num_uvs);
-		}
-	}
-	for(int i=0;i<mesh->num_materials;i++)
-	{
-	assert((~(mesh->materials[i].flags&MATERIAL_HAS_TEXTURE))||(mesh->materials[i].texture.pixels!=NULL));
-	}
-}
-
-uint32_t mesh_count_primitives(mesh_t* mesh)
-{
-return mesh->num_faces;
-}
-
-void mesh_get_primitives(mesh_t* mesh,primitive_t* primitives)
-{
-	for(int i=0;i<mesh->num_faces;i++)
-	{
-	face_t* face=mesh->faces+i;
-		for(int j=0;j<3;j++)
-		{
-		primitives[i].vertices[j]=mesh->vertices[face->vertices[j]];
-		primitives[i].normals[j]=mesh->normals[face->normals[j]];
-			if(mesh->materials[face->material].flags&MATERIAL_HAS_TEXTURE)primitives[i].uvs[j]=mesh->uvs[face->uvs[j]];
-		}
-	primitives[i].material=mesh->materials+face->material;
-	}
-}
-/*
-void mesh_render(mesh_t* mesh,context_t* context)
-{
-	#ifdef DEBUG
-	mesh_check_invariants(mesh);
-	#endif
-
-	for(int i=0;i<mesh->num_faces;i++)
-	{
-	context_draw_primitive(context,mesh_get_primitive(mesh,i));
-	}
-}
-*/
 void mesh_destroy(mesh_t* mesh)
 {
+	for(uint32_t i=0;i<mesh->num_materials;i++)
+	{
+		if(mesh->materials[i].flags&MATERIAL_HAS_TEXTURE)
+		{
+		texture_destroy(&(mesh->materials[i].texture));
+		}
+	}
 
+free(mesh->vertices);
+free(mesh->normals);
+free(mesh->faces);
+free(mesh->materials);
 }
