@@ -154,8 +154,9 @@ int scene_sample_point(scene_t* scene,vector2_t point,matrix_t camera,light_t* l
 {
 ray_hit_t hit;
 vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
-	if(scene_trace_ray(scene,matrix_vector(camera,vector3(point.x,point.y,-128)),vector3_mult(view_vector,-1),&hit))
+	if(scene_trace_ray(scene,matrix_vector(camera,vector3(point.x,point.y,-512)),vector3_mult(view_vector,-1),&hit))
 	{
+	
 	mesh_t* mesh=scene->meshes[hit.mesh_index];
 	face_t* face=mesh->faces+hit.face_index;
 	material_t* material=mesh->materials+face->material;
