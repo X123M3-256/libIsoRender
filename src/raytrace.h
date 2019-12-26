@@ -27,6 +27,7 @@ typedef struct
 	{
 	uint32_t mesh_index;
 	uint32_t face_index;
+	vector3_t position;
 	vector3_t normal;
 	float u,v;
 	}ray_hit_t;
@@ -39,5 +40,5 @@ void scene_finalize(scene_t* scene);
 void scene_destroy(scene_t* scene);
 void scene_add_model(scene_t* scene,mesh_t* mesh,vertex_t (*transform)(vector3_t,vector3_t,void*),void* data);
 int scene_trace_ray(scene_t* scene,vector3_t origin,vector3_t direction,ray_hit_t* hit);
-
+int scene_trace_occlusion_ray(scene_t* scene,vector3_t origin,vector3_t direction);
 #endif

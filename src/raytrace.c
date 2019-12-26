@@ -141,12 +141,37 @@ rtcIntersect1(scene->embree_scene,&context,&rayhit);
 	hit->u=rayhit.hit.u;
 	hit->v=rayhit.hit.v;
 	//Interpolate normal
+	float position_components[3];
 	float normal_components[3];
+	rtcInterpolate0(rtcGetGeometry(scene->embree_scene,rayhit.hit.geomID),rayhit.hit.primID,rayhit.hit.u,rayhit.hit.v,RTC_BUFFER_TYPE_VERTEX,0,position_components,3);
 	rtcInterpolate0(rtcGetGeometry(scene->embree_scene,rayhit.hit.geomID),rayhit.hit.primID,rayhit.hit.u,rayhit.hit.v,RTC_BUFFER_TYPE_VERTEX_ATTRIBUTE,0,normal_components,3);
+	hit->position=vector3(position_components[0],position_components[1],position_components[2]);
 	hit->normal=vector3_normalize(vector3(normal_components[0],normal_components[1],normal_components[2]));
 	return 1;
 	}
 return 0;
+}
+
+int scene_trace_occlusion_ray(scene_t* scene,vector3_t origin,vector3_t direction)
+{
+struct RTCIntersectContext context;
+rtcInitIntersectContext(&context);
+
+struct RTCRay ray;
+ray.org_x=origin.x;
+ray.org_y=origin.y;
+ray.org_z=origin.z;
+ray.dir_x=direction.x;
+ray.dir_y=direction.y;
+ray.dir_z=direction.z;
+ray.tnear=1e-5;
+ray.tfar=INFINITY;
+ray.mask=0;
+ray.flags=0;
+
+rtcOccluded1(scene->embree_scene,&context,&ray);
+
+return ray.tfar>=0.0;
 }
 
 

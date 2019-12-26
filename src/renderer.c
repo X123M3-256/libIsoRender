@@ -18,6 +18,8 @@
 
 matrix_t views[4]={{1,0,0,0,1,0,0,0,1},{0,0,1,0,1,0,-1,0,0},{-1,0,0,0,1,0,0,0,-1},{0,0,-1,0,1,0,1,0,0}};
 
+#define AO_NUM_SAMPLES_U 8
+#define AO_NUM_SAMPLES_V 4
 
 void context_init(context_t* context,light_t* lights,uint32_t num_lights,palette_t palette,float upt)
 	{
@@ -172,8 +174,30 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 		color=texture_sample(&(material->texture),tex_coord);
 		}
 		else color=material->color;
+	//Shade fragment
+	vector3_t shaded_color=shade_fragment(hit.normal,view_vector,color,material->specular_color,material->specular_hardness,lights,num_lights);
+	
+	vector3_t normal=hit.normal;
+	vector3_t tangent;
+		if(fabs(normal.x)>fabs(normal.y))tangent=vector3_mult(vector3(normal.z,0,-normal.x),1.0/sqrt(normal.x*normal.x+normal.z*normal.z)); 
+		else tangent=vector3_mult(vector3(0,-normal.z,normal.y),1.0/sqrt(normal.y*normal.y+normal.z*normal.z)); 
+	vector3_t bitangent=vector3_cross(normal,tangent);
 
-	fragment->color=shade_fragment(hit.normal,view_vector,color,material->specular_color,material->specular_hardness,lights,num_lights);
+	uint32_t occluded_samples=0;
+		for(int i=0;i<AO_NUM_SAMPLES_U;i++)
+		for(int j=0;j<AO_NUM_SAMPLES_V;j++)
+		{
+		float theta=2*M_PI*((i+(((float)rand())/RAND_MAX))/AO_NUM_SAMPLES_U);
+		float phi=asin(1-((j+(((float)rand())/RAND_MAX))/AO_NUM_SAMPLES_V));
+	
+		vector3_t local_sample_dir=vector3(cos(phi)*sin(theta),cos(phi)*cos(theta),sin(phi));
+		vector3_t sample_dir=vector3_add(vector3_mult(normal,local_sample_dir.z),vector3_add(vector3_mult(tangent,local_sample_dir.x),vector3_mult(bitangent,local_sample_dir.y)));
+			if(scene_trace_occlusion_ray(scene,hit.position,sample_dir))occluded_samples++;
+		}
+	float ao_factor=((float)occluded_samples)/(AO_NUM_SAMPLES_U*AO_NUM_SAMPLES_V);
+	
+	//Write result
+	fragment->color=vector3_mult(shaded_color,ao_factor);
 	fragment->region=material->region;
 	return 1;
 	}
@@ -262,8 +286,7 @@ image->pixels=calloc(image->width*image->height,sizeof(uint8_t));
 			int points[4][2]={{x+1,y},{x-1,y+1},{x,y+1},{x+1,y+1}};
 			float weights[4]={7.0/16.0,3.0/16.0,5.0/16.0,1.0/16.0};
 				for(int i=0;i<4;i++)
-				if(points[i][0]>=0&&points[i][0]<framebuffer->width-1&&points[i][1]>=0&&points[i][1]<framebuffer->height-1&&
-				   FRAMEBUFFER_INDEX(framebuffer,x,y).region==FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).region)
+				if(points[i][0]>=0&&points[i][0]<framebuffer->width-1&&points[i][1]>=0&&points[i][1]<framebuffer->height-1&&FRAMEBUFFER_INDEX(framebuffer,x,y).region==FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).region)
 				{		
 				FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).color=vector3_add(vector3_mult(error,weights[i]),FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).color);
 				}
@@ -373,6 +396,7 @@ matrix_t camera_inverse=matrix_inverse(camera);
 		framebuffer.fragments[x+y*framebuffer.width].region=centre_sample.region;
 		}
 	}
+framebuffer_save_bmp(&framebuffer,"test.bmp");
 //Convert to indexed color
 image_from_framebuffer(image,&framebuffer,&(context->palette));
 }
