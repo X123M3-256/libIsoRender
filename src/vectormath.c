@@ -131,3 +131,9 @@ vector3_t transform_vector(transform_t transform,vector3_t vector)
 {
 return vector3_add(matrix_vector(transform.matrix,vector),transform.translation);
 }
+
+
+matrix_t rotate_y(float theta)
+{
+return matrix(cos(theta),0,sin(theta),0,1,0,-sin(theta),0,cos(theta));
+}

@@ -43,10 +43,12 @@ vector3_t vector3_cross(vector3_t a,vector3_t b);
 #define MATRIX_INDEX(matrix,row,col) ((matrix).entries[3*(row)+(col)])
 matrix_t matrix(float a,float b,float c,float d,float e,float f,float g,float h,float i);
 matrix_t matrix_identity();
+float matrix_determinant(matrix_t matrix);
 matrix_t matrix_inverse(matrix_t matrix);
 matrix_t matrix_transpose(matrix_t matrix);
 matrix_t matrix_mult(matrix_t a,matrix_t b);
 vector3_t matrix_vector(matrix_t matrix,vector3_t vector);
+matrix_t rotate_y(float angle);
 
 transform_t transform(matrix_t matrix,vector3_t vector);
 transform_t transform_compose(transform_t transform,transform_t vector);
