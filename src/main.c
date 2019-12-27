@@ -12,7 +12,7 @@ light_t lights[6]={{LIGHT_HEMI,vector3(0.0,1.0,0.0),0.176},{LIGHT_DIFFUSE,vector
 context_init(&context,lights,6,palette_rct2(),1);
 
 mesh_t mesh;
-	if(mesh_load(&mesh,"test.obj"))
+	if(mesh_load(&mesh,"test_ao.obj"))
 	{
 	printf("Failed loading object\n");
 	return 0;

@@ -20,6 +20,8 @@ matrix_t views[4]={{1,0,0,0,1,0,0,0,1},{0,0,1,0,1,0,-1,0,0},{-1,0,0,0,1,0,0,0,-1
 
 #define AO_NUM_SAMPLES_U 8
 #define AO_NUM_SAMPLES_V 4
+#define AA_NUM_SAMPLES_U 2
+#define AA_NUM_SAMPLES_V 2
 
 void context_init(context_t* context,light_t* lights,uint32_t num_lights,palette_t palette,float upt)
 	{
@@ -174,6 +176,14 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 		color=texture_sample(&(material->texture),tex_coord);
 		}
 		else color=material->color;
+	//Remappable colors should be rendered as grayscale
+		if(material->flags&MATERIAL_IS_REMAPPABLE)
+		{
+		float intensity=fmax(fmax(material->color.x,material->color.y),material->color.z);
+		material->color=vector3_from_scalar(intensity);
+		}
+		
+
 	//Shade fragment
 	vector3_t shaded_color=shade_fragment(hit.normal,view_vector,color,material->specular_color,material->specular_hardness,lights,num_lights);
 	
@@ -201,6 +211,26 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 	fragment->region=material->region;
 	return 1;
 	}
+return 0;
+}
+int scene_sample_region(scene_t* scene,vector2_t point,matrix_t camera,uint32_t* region)
+{
+ray_hit_t hit;
+vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
+	if(scene_trace_ray(scene,matrix_vector(camera,vector3(point.x,point.y,-512)),vector3_mult(view_vector,-1),&hit))
+	{
+	
+	mesh_t* mesh=scene->meshes[hit.mesh_index];
+	face_t* face=mesh->faces+hit.face_index;
+	material_t* material=mesh->materials+face->material;
+
+		if(!(material->flags&MATERIAL_IS_MASK))
+		{
+		*region=material->region;
+		return 1;
+		}
+	}
+*region=FRAGMENT_UNUSED;
 return 0;
 }
 
@@ -274,21 +304,25 @@ image->pixels=calloc(image->width*image->height,sizeof(uint8_t));
 
 	for(int y=bounding_box.y_lower;y<=bounding_box.y_upper;y++)
 	{
-		for(int x=bounding_box.x_lower;x<=bounding_box.x_upper;x++)
+	int start=(y&1)?bounding_box.x_upper:bounding_box.x_lower;
+	int stop=(y&1)?bounding_box.x_lower:bounding_box.x_upper;
+	int step=(y&1)?-1:1;
+		for(int x=start;x!=stop;x+=step)
 		{
 		fragment_t fragment=FRAMEBUFFER_INDEX(framebuffer,x,y);
+		fragment.color=vector_from_color(color_from_vector(fragment.color));
 			if(fragment.region!=FRAGMENT_UNUSED)
 			{
 			vector3_t error;
 			image->pixels[(x-bounding_box.x_lower)+(y-bounding_box.y_lower)*image->width]=palette_get_nearest(palette,fragment.region&REGION_MASK,fragment.color,&error);
 						
 			//Distribute error onto neighbouring points
-			int points[4][2]={{x+1,y},{x-1,y+1},{x,y+1},{x+1,y+1}};
+			int points[4][2]={{x+step,y},{x-step,y+1},{x,y+1},{x+step,y+1}};
 			float weights[4]={7.0/16.0,3.0/16.0,5.0/16.0,1.0/16.0};
 				for(int i=0;i<4;i++)
-				if(points[i][0]>=0&&points[i][0]<framebuffer->width-1&&points[i][1]>=0&&points[i][1]<framebuffer->height-1&&FRAMEBUFFER_INDEX(framebuffer,x,y).region==FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).region)
+				if(points[i][0]>=0&&points[i][0]<framebuffer->width-1&&points[i][1]>=0&&points[i][1]<framebuffer->height-1)
 				{		
-				FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).color=vector3_add(vector3_mult(error,weights[i]),FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).color);
+				FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).color=vector3_add(vector3_mult(error,0.3*weights[i]),FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).color);
 				}
 			}
 		}
@@ -340,7 +374,7 @@ fwrite(bitmap_header,1,54,file);
 fclose(file);
 }
 
-void context_render_view(context_t* context,matrix_t view,image_t* image)
+void context_render_view_internal(context_t* context,matrix_t view,image_t* image,uint32_t silhouette)
 {
 matrix_t camera=matrix_mult(context->projection,view);
 
@@ -377,26 +411,52 @@ matrix_t camera_inverse=matrix_inverse(camera);
 	for(int x=0;x<framebuffer.width;x++)
 	{
 	vector2_t sample_point=vector2_add(vector2(x,y),framebuffer.offset);
-	fragment_t centre_sample;
-		if(scene_sample_point(&(context->rt_scene),sample_point,camera_inverse,transformed_lights,context->num_lights,&centre_sample))
+	uint32_t region=FRAGMENT_UNUSED;
+		if(scene_sample_region(&(context->rt_scene),sample_point,camera_inverse,&region))
 		{
-		vector2_t subsample_points[4]={{-0.25,-0.25},{0.25,-0.25},{-0.25,0.25},{0.25,0.25}};
+			if(silhouette)
+			{
+			framebuffer.fragments[x+y*framebuffer.width].color=vector3(1.0,1.0,1.0);
+			framebuffer.fragments[x+y*framebuffer.width].region=region;
+			continue;
+			}
+
 		vector3_t subsample_total=vector3(0.0,0.0,0.0);
 		float num_subsamples=0.0;
-			for(int i=0;i<4;i++)
+			for(int i=0;i<AA_NUM_SAMPLES_U;i++)
+			for(int j=0;j<AA_NUM_SAMPLES_V;j++)
 			{
 			fragment_t subsample;
-				if(scene_sample_point(&(context->rt_scene),vector2_add(sample_point,subsample_points[i]),camera_inverse,transformed_lights,context->num_lights,&subsample)&&subsample.region==centre_sample.region)
+			vector2_t subsample_point=vector2_add(sample_point,vector2((i+(((float)rand())/RAND_MAX))/AA_NUM_SAMPLES_U,(j+(((float)rand())/RAND_MAX))/AA_NUM_SAMPLES_V));
+				if(scene_sample_point(&(context->rt_scene),subsample_point,camera_inverse,transformed_lights,context->num_lights,&subsample))
 				{
 				subsample_total=vector3_add(subsample_total,subsample.color);
 				num_subsamples+=1.0;
 				}
 			}
-		framebuffer.fragments[x+y*framebuffer.width].color=num_subsamples!=0.0?vector3_mult(subsample_total,1.0/num_subsamples):centre_sample.color;
-		framebuffer.fragments[x+y*framebuffer.width].region=centre_sample.region;
+			if(num_subsamples!=0.0)
+			{
+			framebuffer.fragments[x+y*framebuffer.width].color=vector3_mult(subsample_total,1.0/num_subsamples);
+			framebuffer.fragments[x+y*framebuffer.width].region=region;
+			}
+			else
+			{
+			//This is an edge case; but it ensures that the AA never changes the outline of the image, which is important for sprites that tesselate
+			scene_sample_point(&(context->rt_scene),sample_point,camera_inverse,transformed_lights,context->num_lights,&(framebuffer.fragments[x+y*framebuffer.width]));
+			}
 		}
 	}
 framebuffer_save_bmp(&framebuffer,"test.bmp");
 //Convert to indexed color
 image_from_framebuffer(image,&framebuffer,&(context->palette));
+}
+
+void context_render_view(context_t* context,matrix_t view,image_t* image)
+{
+context_render_view_internal(context,view,image,0);
+}
+
+void context_render_silhouette(context_t* context,matrix_t view,image_t* image)
+{
+context_render_view_internal(context,view,image,1);
 }
