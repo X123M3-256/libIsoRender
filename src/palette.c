@@ -16,6 +16,12 @@ float vector3_get_luma(vector3_t color)
 return 0.299*color.x+0.587*color.y+0.114*color.z;
 }
 
+float vector3_get_max(vector3_t color)
+{
+return fmax(fmax(color.x,color.y),color.z);
+}
+
+
 float srgb2linear(float x)
 {
 	if (x<=0.04045)return x/12.92;
@@ -49,8 +55,7 @@ float minimum_error=INFINITY;
 	{
 	float error;
 	vector3_t color=vector_from_color(palette->colors[i]);
-		if(palette->regions[region].remap)error=fabs(vector3_get_luma(target)-vector3_get_luma(color));
-		else error=vector3_norm(vector3_sub(target,color));
+		error=vector3_norm(vector3_sub(target,color));
 
 		if(error<minimum_error)
 		{
@@ -272,6 +277,19 @@ palette_t palette={
 {131,207,207},
 {171,231,231},//200
 {207,255,255},
+{23,35,35},
+{35,51,51},
+{47,67,67},
+{63,83,83},
+{75,99,99},
+{91,115,115},
+{111,131,131},
+{131,151,151},
+{159,175,175},
+{183,195,195},
+{211,219,219},
+{239,243,243},
+/*Original magenta remap colors
 {63,0,27},
 {103,0,51},
 {123,11,63},
@@ -284,6 +302,7 @@ palette_t palette={
 {247,151,203},
 {251,183,223},
 {255,215,239},
+*/
 {39,19,0},
 {55,31,7},
 {71,47,15},
@@ -313,6 +332,19 @@ palette_t palette={
 {67,91,91},//240
 {83,107,107},
 {99,123,123},
+{23,35,35},
+{35,51,51},
+{47,67,67},
+{63,83,83},
+{75,99,99},
+{91,115,115},
+{111,131,131},
+{131,151,151},
+{159,175,175},
+{183,195,195},
+{211,219,219},
+{239,243,243},
+/* Original green remap colors
 {8,67,8},
 {16,85,16},
 {24,103,24},
@@ -325,6 +357,7 @@ palette_t palette={
 {80,219,80},
 {88,237,88},
 {92,255,92}
+*/
 }};
 return palette;
 }
