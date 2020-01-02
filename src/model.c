@@ -143,11 +143,8 @@ output->materials=malloc(scene->mNumMaterials*sizeof(material_t));
 			output->materials[i].flags|=MATERIAL_IS_REMAPPABLE;
 			output->materials[i].region=2;
 			}		
-			else if(strstr(name.data,"Mask")!=NULL)
-			{
-			output->materials[i].flags|=MATERIAL_IS_MASK;
-			output->materials[i].region=1;
-			}
+			if(strstr(name.data,"Mask")!=NULL)output->materials[i].flags|=MATERIAL_IS_MASK;
+			if(strstr(name.data,"NoAO")!=NULL)output->materials[i].flags|=MATERIAL_NO_AO;
 		//printf("%s\n",name.data);
 		}		
 

@@ -31,7 +31,7 @@ void context_init(context_t* context,light_t* lights,uint32_t num_lights,palette
 	//Dimetric projection
 	const matrix_t projection={
 		32.0/upt		,0.0	   		,-32.0/upt,
-		 -16.0/upt	,-16.0*SQRT_6/upt	,-16.0/upt,
+		 -16.0/upt		,-16.0*SQRT_6/upt	,-16.0/upt,
 		 16.0*SQRT_3/upt	,-16.0*SQRT_2/upt	,16.0*SQRT_3/upt
 		};
 	context->projection=projection;
@@ -52,14 +52,14 @@ out.normal=vector3_normalize(matrix_vector(transform.matrix,normal));
 return out;
 }
 
-void context_add_model_transformed(context_t* context,mesh_t* mesh,vertex_t (*transform)(vector3_t,vector3_t,void*),void* data)
+void context_add_model_transformed(context_t* context,mesh_t* mesh,vertex_t (*transform)(vector3_t,vector3_t,void*),void* data,int mask)
 {
-scene_add_model(&(context->rt_scene),mesh,transform,data);
+scene_add_model(&(context->rt_scene),mesh,transform,data,mask);
 }
 
-void context_add_model(context_t* context,mesh_t* mesh,transform_t transform)
+void context_add_model(context_t* context,mesh_t* mesh,transform_t transform,int mask)
 {
-scene_add_model(&(context->rt_scene),mesh,&linear_transform,&transform);
+scene_add_model(&(context->rt_scene),mesh,&linear_transform,&transform,mask);
 }
 
 void context_finalize_render(context_t* context)
@@ -122,14 +122,14 @@ float cook_torr_spec(vector3_t n,vector3_t l,vector3_t v,int hard)
         	if(nh<0.0f) return 0.0f;
         float nv=vector3_dot(n,v);
         	if (nv<0.0f) nv= 0.0f;
-
+	
         return spec(nh, hard)/(0.1f+nv);
 	}
-
 
 vector3_t shade_fragment(vector3_t normal,vector3_t view,vector3_t color,vector3_t specular_color,uint32_t specular_hardness,light_t* lights,uint32_t num_lights)
 	{
 	vector3_t output_color=vector3(0,0,0);
+	
 		for(uint32_t i=0;i<num_lights;i++)
 		{
 			if(lights[i].type==LIGHT_HEMI)
@@ -146,7 +146,6 @@ vector3_t shade_fragment(vector3_t normal,vector3_t view,vector3_t color,vector3
 			{
 			float diffuse_factor=lights[i].intensity*fmax(vector3_dot(normal,lights[i].direction),0.0);
 			//vector3_t reflected_light_direction=vector3_sub(vector3_mult(normal,2.0*vector3_dot(lights[i].direction,normal)),lights[i].direction);
-			
 			float specular_factor=lights[i].intensity*cook_torr_spec(normal,lights[i].direction,view,specular_hardness);
 			output_color=vector3_add(vector3_add(vector3_mult(color,diffuse_factor),vector3_mult(specular_color,specular_factor)),output_color);	
 			}	
@@ -157,7 +156,7 @@ vector3_t shade_fragment(vector3_t normal,vector3_t view,vector3_t color,vector3
 int scene_sample_point(scene_t* scene,vector2_t point,matrix_t camera,light_t* lights,uint32_t num_lights,fragment_t* fragment)
 {
 ray_hit_t hit;
-vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
+vector3_t view_vector=vector3_normalize(matrix_vector(camera,vector3(0,0,-1)));
 	if(scene_trace_ray(scene,matrix_vector(camera,vector3(point.x,point.y,-512)),vector3_mult(view_vector,-1),&hit))
 	{
 	
@@ -166,7 +165,10 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 	material_t* material=mesh->materials+face->material;
 
 	//Check if this is a mask
-		if(material->flags&MATERIAL_IS_MASK)return 0;
+		if((scene->mask&(1<<hit.mesh_index))||material->flags&MATERIAL_IS_MASK)
+		{
+		return 0;
+		}
 
 	//Compute surface color
 	vector3_t color;
@@ -181,7 +183,7 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 		{
 		float intensity=fmax(fmax(material->color.x,material->color.y),material->color.z);
 		material->color=vector3_from_scalar(intensity);
-		}
+	 	}
 		
 
 	//Shade fragment
@@ -192,20 +194,23 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 		if(fabs(normal.x)>fabs(normal.y))tangent=vector3_mult(vector3(normal.z,0,-normal.x),1.0/sqrt(normal.x*normal.x+normal.z*normal.z)); 
 		else tangent=vector3_mult(vector3(0,-normal.z,normal.y),1.0/sqrt(normal.y*normal.y+normal.z*normal.z)); 
 	vector3_t bitangent=vector3_cross(normal,tangent);
-
-	uint32_t occluded_samples=0;
-		for(int i=0;i<AO_NUM_SAMPLES_U;i++)
-		for(int j=0;j<AO_NUM_SAMPLES_V;j++)
+	
+	float ao_factor=1.0;
+		if(!(material->flags&MATERIAL_NO_AO))
 		{
-		float theta=2*M_PI*((i+(((float)rand())/RAND_MAX))/AO_NUM_SAMPLES_U);
-		float phi=asin(1-((j+(((float)rand())/RAND_MAX))/AO_NUM_SAMPLES_V));
-	
-		vector3_t local_sample_dir=vector3(cos(phi)*sin(theta),cos(phi)*cos(theta),sin(phi));
-		vector3_t sample_dir=vector3_add(vector3_mult(normal,local_sample_dir.z),vector3_add(vector3_mult(tangent,local_sample_dir.x),vector3_mult(bitangent,local_sample_dir.y)));
-			if(scene_trace_occlusion_ray(scene,hit.position,sample_dir))occluded_samples++;
+		uint32_t occluded_samples=0;
+			for(int i=0;i<AO_NUM_SAMPLES_U;i++)
+			for(int j=0;j<AO_NUM_SAMPLES_V;j++)
+			{
+			float theta=2*M_PI*((i+(((float)rand())/RAND_MAX))/AO_NUM_SAMPLES_U);
+			float phi=asin(1-((j+(((float)rand())/RAND_MAX))/AO_NUM_SAMPLES_V));
+		
+			vector3_t local_sample_dir=vector3(cos(phi)*sin(theta),cos(phi)*cos(theta),sin(phi));
+			vector3_t sample_dir=vector3_add(vector3_mult(normal,local_sample_dir.z),vector3_add(vector3_mult(tangent,local_sample_dir.x),vector3_mult(bitangent,local_sample_dir.y)));
+				if(scene_trace_occlusion_ray(scene,hit.position,sample_dir))occluded_samples++;
+			}
+		ao_factor=((float)occluded_samples)/(AO_NUM_SAMPLES_U*AO_NUM_SAMPLES_V);
 		}
-	float ao_factor=((float)occluded_samples)/(AO_NUM_SAMPLES_U*AO_NUM_SAMPLES_V);
-	
 	//Write result
 	fragment->color=vector3_mult(shaded_color,ao_factor);
 	fragment->region=material->region;
@@ -213,7 +218,7 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 	}
 return 0;
 }
-int scene_sample_region(scene_t* scene,vector2_t point,matrix_t camera,uint32_t* region)
+int scene_sample_material(scene_t* scene,vector2_t point,matrix_t camera,material_t** material_out)
 {
 ray_hit_t hit;
 vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
@@ -224,13 +229,12 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 	face_t* face=mesh->faces+hit.face_index;
 	material_t* material=mesh->materials+face->material;
 
-		if(!(material->flags&MATERIAL_IS_MASK))
+		if(!(scene->mask&(1<<hit.mesh_index))&&!(material->flags&MATERIAL_IS_MASK))
 		{
-		*region=material->region;
+		*material_out=material;
 		return 1;
 		}
 	}
-*region=FRAGMENT_UNUSED;
 return 0;
 }
 
@@ -293,6 +297,7 @@ rect_t bounds;
 	if(!found_pixel)return rect(0,0,0,0);
 	else return bounds;
 }
+
 void image_from_framebuffer(image_t* image,framebuffer_t* framebuffer,palette_t* palette)
 {
 rect_t bounding_box=framebuffer_get_bounds(framebuffer);
@@ -304,9 +309,10 @@ image->pixels=calloc(image->width*image->height,sizeof(uint8_t));
 
 	for(int y=bounding_box.y_lower;y<=bounding_box.y_upper;y++)
 	{
-	int start=(y&1)?bounding_box.x_upper:bounding_box.x_lower;
-	int stop=(y&1)?bounding_box.x_lower:bounding_box.x_upper;
-	int step=(y&1)?-1:1;
+	int start=(1&1)?(bounding_box.x_upper):bounding_box.x_lower;
+	int stop=(1&1)?(bounding_box.x_lower-1):bounding_box.x_upper+1;
+	int step=(1&1)?-1:1;
+
 		for(int x=start;x!=stop;x+=step)
 		{
 		fragment_t fragment=FRAMEBUFFER_INDEX(framebuffer,x,y);
@@ -410,14 +416,15 @@ matrix_t camera_inverse=matrix_inverse(camera);
 	for(int y=0;y<framebuffer.height;y++)
 	for(int x=0;x<framebuffer.width;x++)
 	{
+
 	vector2_t sample_point=vector2_add(vector2(x,y),framebuffer.offset);
-	uint32_t region=FRAGMENT_UNUSED;
-		if(scene_sample_region(&(context->rt_scene),sample_point,camera_inverse,&region))
+	material_t* material;
+		if(scene_sample_material(&(context->rt_scene),sample_point,camera_inverse,&material))
 		{
 			if(silhouette)
 			{
 			framebuffer.fragments[x+y*framebuffer.width].color=vector3(1.0,1.0,1.0);
-			framebuffer.fragments[x+y*framebuffer.width].region=region;
+			framebuffer.fragments[x+y*framebuffer.width].region=material->region;
 			continue;
 			}
 
@@ -427,7 +434,7 @@ matrix_t camera_inverse=matrix_inverse(camera);
 			for(int j=0;j<AA_NUM_SAMPLES_V;j++)
 			{
 			fragment_t subsample;
-			vector2_t subsample_point=vector2_add(sample_point,vector2((i+(((float)rand())/RAND_MAX))/AA_NUM_SAMPLES_U,(j+(((float)rand())/RAND_MAX))/AA_NUM_SAMPLES_V));
+			vector2_t subsample_point=vector2_add(sample_point,vector2((i+(((float)rand())/RAND_MAX))/AA_NUM_SAMPLES_U-0.5,(j+(((float)rand())/RAND_MAX))/AA_NUM_SAMPLES_V-0.5));
 				if(scene_sample_point(&(context->rt_scene),subsample_point,camera_inverse,transformed_lights,context->num_lights,&subsample))
 				{
 				subsample_total=vector3_add(subsample_total,subsample.color);
@@ -437,7 +444,7 @@ matrix_t camera_inverse=matrix_inverse(camera);
 			if(num_subsamples!=0.0)
 			{
 			framebuffer.fragments[x+y*framebuffer.width].color=vector3_mult(subsample_total,1.0/num_subsamples);
-			framebuffer.fragments[x+y*framebuffer.width].region=region;
+			framebuffer.fragments[x+y*framebuffer.width].region=material->region;
 			}
 			else
 			{

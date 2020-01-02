@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <assert.h>
 #include <embree3/rtcore.h>
 #include "raytrace.h"
 
@@ -29,8 +30,8 @@ void device_destroy(device_t device)
 
 void scene_init(scene_t* scene,device_t device)
 {
-scene->meshes=NULL;
 scene->num_meshes=0;
+scene->mask=0;
 scene->embree_device=device;
 scene->embree_scene=rtcNewScene(device);
 scene->x_max=-INFINITY;
@@ -48,7 +49,6 @@ rtcCommitScene(scene->embree_scene);
 
 void scene_destroy(scene_t* scene)
 {
-free(scene->meshes);
 rtcReleaseScene(scene->embree_scene);
 }
 
@@ -63,11 +63,12 @@ return x>=y?x:y;
 }
 
 
-void scene_add_model(scene_t* scene,mesh_t* mesh,vertex_t (*transform)(vector3_t,vector3_t,void*),void* data)
+void scene_add_model(scene_t* scene,mesh_t* mesh,vertex_t (*transform)(vector3_t,vector3_t,void*),void* data,int mask)
 	{
 	//Add mesh to list of meshes
-	scene->meshes=realloc(scene->meshes,(scene->num_meshes+1)*sizeof(mesh_t*));
+	assert(scene->num_meshes<MAX_MESHES);
 	scene->meshes[scene->num_meshes]=mesh;
+		if(mask)scene->mask|=1<<scene->num_meshes;
 	scene->num_meshes++;
 	//Create Embree geometry
 	RTCGeometry geom=rtcNewGeometry(scene->embree_device,RTC_GEOMETRY_TYPE_TRIANGLE);
