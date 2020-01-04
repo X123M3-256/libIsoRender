@@ -3,8 +3,9 @@ project (IsoRender C)
 
 find_package(PNG REQUIRED)
 include_directories(${PNG_INCLUDE_DIR} ../libImage/src)
+link_directories(/usr/local/Cellar/embree/3.6.1/lib)
+link_directories(/usr/local/Cellar/assimp/5.0.0/lib)
 link_directories(../libImage)
-
 
 add_library(IsoRender STATIC src/vectormath.c src/palette.c src/model.c src/renderer.c src/raytrace.c)
 set_property(TARGET IsoRender PROPERTY C_STANDARD 99)
