@@ -13,6 +13,7 @@
 #define UNITS_PER_PIXEL 128
 #define FRAGMENT_UNUSED 255
 #define REGION_MASK 0x7
+#define MAX_REGIONS 4
 
 typedef struct //Rect
 	{
@@ -25,6 +26,8 @@ typedef struct //Rect
 typedef struct //Fragment
 	{
 	vector3_t color;
+	float region_weights[MAX_REGIONS];
+	uint8_t background_aa;
 	uint8_t region;
 	}fragment_t;
 

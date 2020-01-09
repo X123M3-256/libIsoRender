@@ -213,6 +213,7 @@ vector3_t view_vector=vector3_normalize(matrix_vector(camera,vector3(0,0,-1)));
 		}
 	//Write result
 	fragment->color=vector3_mult(shaded_color,ao_factor);
+	fragment->background_aa=material->flags&MATERIAL_BACKGROUND_AA;
 	fragment->region=material->region;
 	return 1;
 	}
@@ -380,6 +381,12 @@ fwrite(bitmap_header,1,54,file);
 fclose(file);
 }
 
+static float cubic_filter(float x)
+{       
+        if(x<1.0)return x*(0.5*x*x-x)+2.0/3.0; 
+        if(x<2.0)return (2.0-x)*(2.0-x)*(2.0-x)/6.0;
+        return 0.0f;
+}
 void context_render_view_internal(context_t* context,matrix_t view,image_t* image,uint32_t silhouette)
 {
 matrix_t camera=matrix_mult(context->projection,view);
@@ -390,7 +397,7 @@ rect_t bounds=scene_get_bounds(&(context->rt_scene),camera);
 framebuffer_t framebuffer;
 framebuffer.width=bounds.x_upper-bounds.x_lower+1;
 framebuffer.height=bounds.y_upper-bounds.y_lower;
-framebuffer.offset=vector2((float)(bounds.x_lower)-0.5,(float)(bounds.y_lower));
+framebuffer.offset=vector2((float)(bounds.x_lower)-0.5,(float)(bounds.y_lower)-0.5);
 framebuffer.fragments=malloc(framebuffer.width*framebuffer.height*sizeof(fragment_t));
 
 
@@ -410,6 +417,8 @@ matrix_t view_inverse=matrix_inverse(view);
 	{
 	framebuffer.fragments[i].color=vector3(0.0,0.0,0.0);
 	framebuffer.fragments[i].region=FRAGMENT_UNUSED;
+		for(int j=0;j<MAX_REGIONS;j++)framebuffer.fragments[i].region_weights[j]=0.0;
+	framebuffer.fragments[i].background_aa=0;
 	}
 
 matrix_t camera_inverse=matrix_inverse(camera);
@@ -419,40 +428,73 @@ matrix_t camera_inverse=matrix_inverse(camera);
 
 	vector2_t sample_point=vector2_add(vector2(x,y),framebuffer.offset);
 	material_t* material;
+	
+	int outside_sample=1;
 		if(scene_sample_material(&(context->rt_scene),sample_point,camera_inverse,&material))
 		{
+		outside_sample=0;
 			if(silhouette)
 			{
 			framebuffer.fragments[x+y*framebuffer.width].color=vector3(1.0,1.0,1.0);
 			framebuffer.fragments[x+y*framebuffer.width].region=material->region;
 			continue;
 			}
+		}
 
-		vector3_t subsample_total=vector3(0.0,0.0,0.0);
-		float num_subsamples=0.0;
-			for(int i=0;i<AA_NUM_SAMPLES_U;i++)
-			for(int j=0;j<AA_NUM_SAMPLES_V;j++)
+	vector3_t subsample_total=vector3(0.0,0.0,0.0);
+	float num_subsamples=0.0;
+		for(int i=0;i<AA_NUM_SAMPLES_U;i++)
+		for(int j=0;j<AA_NUM_SAMPLES_V;j++)
+		{
+		fragment_t subsample;
+		subsample.color=vector3(0,0,0);//vector3(0.0409151969068532,0.0437350292569735,0.04091519690685320);
+		subsample.region=FRAGMENT_UNUSED;
+
+		vector2_t subsample_point=vector2((i+0.5)/AA_NUM_SAMPLES_U-0.5,(j+0.5)/AA_NUM_SAMPLES_V-0.5);
+		scene_sample_point(&(context->rt_scene),vector2_add(sample_point,subsample_point),camera_inverse,transformed_lights,context->num_lights,&subsample);
+		
+
+		if(subsample.region!=FRAGMENT_UNUSED&&!(outside_sample&&!subsample.background_aa))
+		{
+			if(subsample.background_aa)framebuffer.fragments[x+y*framebuffer.width].background_aa=1;
+		//Sum contributions to surrounding pixels
+		//float sum=0.0;
+			for(int k=x-1;k<=x+1;k++)
+			for(int l=y-1;l<=y+1;l++)
 			{
-			fragment_t subsample;
-			vector2_t subsample_point=vector2_add(sample_point,vector2((i+(((float)rand())/RAND_MAX))/AA_NUM_SAMPLES_U-0.5,(j+(((float)rand())/RAND_MAX))/AA_NUM_SAMPLES_V-0.5));
-				if(scene_sample_point(&(context->rt_scene),subsample_point,camera_inverse,transformed_lights,context->num_lights,&subsample))
-				{
-				subsample_total=vector3_add(subsample_total,subsample.color);
-				num_subsamples+=1.0;
-				}
-			}
-			if(num_subsamples!=0.0)
-			{
-			framebuffer.fragments[x+y*framebuffer.width].color=vector3_mult(subsample_total,1.0/num_subsamples);
-			framebuffer.fragments[x+y*framebuffer.width].region=material->region;
-			}
-			else
-			{
-			//This is an edge case; but it ensures that the AA never changes the outline of the image, which is important for sprites that tesselate
-			scene_sample_point(&(context->rt_scene),sample_point,camera_inverse,transformed_lights,context->num_lights,&(framebuffer.fragments[x+y*framebuffer.width]));
+				if(k<0||l<0||k>=framebuffer.width||l>=framebuffer.height)continue;
+			float dist=vector2_norm(vector2_sub(subsample_point,vector2(k-x,l-y)));
+			float weight=cubic_filter(dist/0.5)*(0.25/0.367939);
+		//	sum+=weight;
+			framebuffer.fragments[k+l*framebuffer.width].color=vector3_add(framebuffer.fragments[k+l*framebuffer.width].color,vector3_mult(subsample.color,weight));
+			framebuffer.fragments[k+l*framebuffer.width].region_weights[subsample.region]+=weight;
 			}
 		}
+		//printf("%f\n",sum);
+		}
 	}
+
+	for(int y=0;y<framebuffer.height;y++)
+	for(int x=0;x<framebuffer.width;x++)
+	{
+	float* weights=framebuffer.fragments[x+y*framebuffer.width].region_weights;
+	float max=weights[0];
+	float total_weight=weights[0];
+	int region=0;
+		for(int i=1;i<MAX_REGIONS;i++)
+		{
+			if(weights[i]>max)
+			{
+			max=weights[i];
+			region=i;
+			}
+		total_weight+=weights[i];
+		}
+	framebuffer.fragments[x+y*framebuffer.width].region=total_weight>0.25?region:FRAGMENT_UNUSED;
+		if(!framebuffer.fragments[x+y*framebuffer.width].background_aa)framebuffer.fragments[x+y*framebuffer.width].color=vector3_mult(framebuffer.fragments[x+y*framebuffer.width].color,1.0/total_weight);
+	}
+
+
 framebuffer_save_bmp(&framebuffer,"test.bmp");
 //Convert to indexed color
 image_from_framebuffer(image,&framebuffer,&(context->palette));

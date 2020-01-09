@@ -145,6 +145,7 @@ output->materials=malloc(scene->mNumMaterials*sizeof(material_t));
 			}		
 			if(strstr(name.data,"Mask")!=NULL)output->materials[i].flags|=MATERIAL_IS_MASK;
 			if(strstr(name.data,"NoAO")!=NULL)output->materials[i].flags|=MATERIAL_NO_AO;
+			if(strstr(name.data,"BackgroundAA")!=NULL)output->materials[i].flags|=MATERIAL_BACKGROUND_AA;
 		//printf("%s\n",name.data);
 		}		
 

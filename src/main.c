@@ -62,7 +62,7 @@ putchar('\n');
 context_init(&context,lights,6,palette_rct2(),1);
 
 mesh_t mesh;
-	if(mesh_load(&mesh,"support.obj"))
+	if(mesh_load(&mesh,"test_specular.obj"))
 	{
 	printf("Failed loading object\n");
 	return 0;

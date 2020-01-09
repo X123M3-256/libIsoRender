@@ -19,6 +19,11 @@ vector2_t vector2_mult(vector2_t a,float b)
 {
 return vector2(a.x*b,a.y*b);
 }
+float vector2_norm(vector2_t a)
+{
+return sqrt(a.x*a.x+a.y*a.y);
+}
+
 
 vector3_t vector3(float x,float y,float z)
 {
