@@ -40,7 +40,8 @@ enum light_type
 
 typedef struct //Light
 	{
-	uint32_t type;
+	uint16_t type;
+	uint16_t shadow;
 	vector3_t direction;
 	float intensity;
 	}light_t;

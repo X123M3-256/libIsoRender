@@ -68,7 +68,7 @@ void scene_add_model(scene_t* scene,mesh_t* mesh,vertex_t (*transform)(vector3_t
 	//Add mesh to list of meshes
 	assert(scene->num_meshes<MAX_MESHES);
 	scene->meshes[scene->num_meshes]=mesh;
-		if(mask)scene->mask|=1<<scene->num_meshes;
+		if(mask)scene->mask|=((uint64_t)1)<<scene->num_meshes;
 	scene->num_meshes++;
 	//Create Embree geometry
 	RTCGeometry geom=rtcNewGeometry(scene->embree_device,RTC_GEOMETRY_TYPE_TRIANGLE);
@@ -172,7 +172,7 @@ ray.flags=0;
 
 rtcOccluded1(scene->embree_scene,&context,&ray);
 
-return ray.tfar>=0.0;
+return ray.tfar<=0.0;
 }
 
 

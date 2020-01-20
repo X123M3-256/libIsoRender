@@ -7,15 +7,19 @@
 int main()
 {
 context_t context;
-
-light_t lights[6]={
-{LIGHT_SPECULAR,vector3(0.671641,0.38733586252,-0.631561),0.35},
-{LIGHT_DIFFUSE,vector3(0.0,1.0,0.0),0.044},
-{LIGHT_DIFFUSE,vector3_normalize(vector3(-1.0,1.0,0.0)),0.19},
-{LIGHT_DIFFUSE,vector3_normalize(vector3(0.0,1.0,1.0)),0.04},
-{LIGHT_DIFFUSE,vector3_normalize(vector3(0.5,0.816,-0.5000000)),0.17},
-{LIGHT_DIFFUSE,vector3_normalize(vector3(-1.0,1.0,-1.0)),0.045},
+//vector3(0.65190909243,0.38733586252+0.2,-0.65190909243)
+light_t lights[9]={
+{LIGHT_DIFFUSE,0,vector3_normalize(vector3(0.0,-1.0,0.0)),0.25},
+{LIGHT_DIFFUSE,0,vector3_normalize(vector3(1.0,0.3,0.0)),0.32},
+{LIGHT_SPECULAR,0,vector3_normalize(vector3(1,1,-1)),1.0},
+{LIGHT_DIFFUSE,0,vector3_normalize(vector3(1,0.65,-1)),0.8},
+{LIGHT_DIFFUSE,0,vector3(0.0,1.0,0.0),0.174},
+{LIGHT_DIFFUSE,0,vector3_normalize(vector3(-1.0,0.0,0.0)),0.15},
+{LIGHT_DIFFUSE,0,vector3_normalize(vector3(0.0,1.0,1.0)),0.2},
+{LIGHT_DIFFUSE,0,vector3_normalize(vector3(0.65,0.816,-0.65000000)),0.25},
+{LIGHT_DIFFUSE,0,vector3_normalize(vector3(-1.0,0.0,-1.0)),0.25},
 };
+context_init(&context,lights,9,palette_rct2(),1.5*sqrt(6)/2);
 /*
 vector3_t normals[9]={
 vector3(-0.707107,0.000000,-0.707107),
@@ -59,10 +63,9 @@ putchar(')');
 putchar('\n');	
 */
 
-context_init(&context,lights,6,palette_rct2(),1);
 
 mesh_t mesh;
-	if(mesh_load(&mesh,"test_specular.obj"))
+	if(mesh_load(&mesh,"rmc_support_barrel_roll.obj"))
 	{
 	printf("Failed loading object\n");
 	return 0;

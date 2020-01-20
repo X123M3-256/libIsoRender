@@ -126,12 +126,19 @@ float cook_torr_spec(vector3_t n,vector3_t l,vector3_t v,int hard)
         return spec(nh, hard)/(0.1f+nv);
 	}
 
-vector3_t shade_fragment(vector3_t normal,vector3_t view,vector3_t color,vector3_t specular_color,uint32_t specular_hardness,light_t* lights,uint32_t num_lights)
+float vector3_dot_clamped(vector3_t a,vector3_t b)
+{
+return fmax(vector3_dot(a,b),0.0);
+}
+
+
+vector3_t shade_fragment(scene_t* scene,vector3_t pos,vector3_t normal,vector3_t view,vector3_t color,vector3_t specular_color,float specular_exponent,light_t* lights,uint32_t num_lights)
 	{
 	vector3_t output_color=vector3(0,0,0);
 	
 		for(uint32_t i=0;i<num_lights;i++)
 		{
+			if(lights[i].shadow&&scene_trace_occlusion_ray(scene,pos,lights[i].direction))continue;
 			if(lights[i].type==LIGHT_HEMI)
 			{
 			float diffuse_factor=0.5*lights[i].intensity*(1+vector3_dot(normal,lights[i].direction));
@@ -139,15 +146,14 @@ vector3_t shade_fragment(vector3_t normal,vector3_t view,vector3_t color,vector3
 			}
 			else if(lights[i].type==LIGHT_DIFFUSE)
 			{
-			float diffuse_factor=lights[i].intensity*fmax(vector3_dot(normal,lights[i].direction),0.0);
+			float diffuse_factor=lights[i].intensity*vector3_dot_clamped(normal,lights[i].direction);
 			output_color=vector3_add(vector3_mult(color,diffuse_factor),output_color);
 			}
 			else
 			{
-			float diffuse_factor=lights[i].intensity*fmax(vector3_dot(normal,lights[i].direction),0.0);
-			//vector3_t reflected_light_direction=vector3_sub(vector3_mult(normal,2.0*vector3_dot(lights[i].direction,normal)),lights[i].direction);
-			float specular_factor=lights[i].intensity*cook_torr_spec(normal,lights[i].direction,view,specular_hardness);
-			output_color=vector3_add(vector3_add(vector3_mult(color,diffuse_factor),vector3_mult(specular_color,specular_factor)),output_color);	
+			vector3_t reflected_light_direction=vector3_sub(vector3_mult(normal,2.0*vector3_dot(lights[i].direction,normal)),lights[i].direction);
+			float specular_factor=lights[i].intensity*powf(vector3_dot_clamped(reflected_light_direction,view),specular_exponent);
+			output_color=vector3_add(vector3_mult(specular_color,specular_factor),output_color);	
 			}	
 		}
 	return output_color; 
@@ -165,7 +171,7 @@ vector3_t view_vector=vector3_normalize(matrix_vector(camera,vector3(0,0,-1)));
 	material_t* material=mesh->materials+face->material;
 
 	//Check if this is a mask
-		if((scene->mask&(1<<hit.mesh_index))||material->flags&MATERIAL_IS_MASK)
+		if((scene->mask&(((uint64_t)1)<<hit.mesh_index))||material->flags&MATERIAL_IS_MASK)
 		{
 		return 0;
 		}
@@ -187,7 +193,7 @@ vector3_t view_vector=vector3_normalize(matrix_vector(camera,vector3(0,0,-1)));
 		
 
 	//Shade fragment
-	vector3_t shaded_color=shade_fragment(hit.normal,view_vector,color,material->specular_color,material->specular_hardness,lights,num_lights);
+	vector3_t shaded_color=shade_fragment(scene,hit.position,hit.normal,view_vector,color,material->specular_color,material->specular_exponent,lights,num_lights);
 	
 	vector3_t normal=hit.normal;
 	vector3_t tangent;
@@ -198,7 +204,7 @@ vector3_t view_vector=vector3_normalize(matrix_vector(camera,vector3(0,0,-1)));
 	float ao_factor=1.0;
 		if(!(material->flags&MATERIAL_NO_AO))
 		{
-		uint32_t occluded_samples=0;
+		uint32_t not_occluded_samples=0;
 			for(int i=0;i<AO_NUM_SAMPLES_U;i++)
 			for(int j=0;j<AO_NUM_SAMPLES_V;j++)
 			{
@@ -207,9 +213,9 @@ vector3_t view_vector=vector3_normalize(matrix_vector(camera,vector3(0,0,-1)));
 		
 			vector3_t local_sample_dir=vector3(cos(phi)*sin(theta),cos(phi)*cos(theta),sin(phi));
 			vector3_t sample_dir=vector3_add(vector3_mult(normal,local_sample_dir.z),vector3_add(vector3_mult(tangent,local_sample_dir.x),vector3_mult(bitangent,local_sample_dir.y)));
-				if(scene_trace_occlusion_ray(scene,hit.position,sample_dir))occluded_samples++;
+				if(!scene_trace_occlusion_ray(scene,hit.position,sample_dir))not_occluded_samples++;
 			}
-		ao_factor=((float)occluded_samples)/(AO_NUM_SAMPLES_U*AO_NUM_SAMPLES_V);
+		ao_factor=((float)not_occluded_samples)/(AO_NUM_SAMPLES_U*AO_NUM_SAMPLES_V);
 		}
 	//Write result
 	fragment->color=vector3_mult(shaded_color,ao_factor);
@@ -230,7 +236,7 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 	face_t* face=mesh->faces+hit.face_index;
 	material_t* material=mesh->materials+face->material;
 
-		if(!(scene->mask&(1<<hit.mesh_index))&&!(material->flags&MATERIAL_IS_MASK))
+		if(!(scene->mask&(((uint64_t)1)<<hit.mesh_index))&&!(material->flags&MATERIAL_IS_MASK))
 		{
 		*material_out=material;
 		return 1;
@@ -397,7 +403,7 @@ rect_t bounds=scene_get_bounds(&(context->rt_scene),camera);
 framebuffer_t framebuffer;
 framebuffer.width=bounds.x_upper-bounds.x_lower+1;
 framebuffer.height=bounds.y_upper-bounds.y_lower;
-framebuffer.offset=vector2((float)(bounds.x_lower)-0.5,(float)(bounds.y_lower)-0.5);
+framebuffer.offset=vector2((float)(bounds.x_lower)-0.5,(float)(bounds.y_lower));
 framebuffer.fragments=malloc(framebuffer.width*framebuffer.height*sizeof(fragment_t));
 
 
@@ -407,6 +413,7 @@ matrix_t view_inverse=matrix_inverse(view);
 	for(int i=0;i<context->num_lights;i++)
 	{
 	transformed_lights[i].type=context->lights[i].type;
+	transformed_lights[i].shadow=context->lights[i].shadow;
 	transformed_lights[i].direction=matrix_vector(view_inverse,context->lights[i].direction);
 	transformed_lights[i].intensity=context->lights[i].intensity;
 	}
@@ -437,6 +444,8 @@ matrix_t camera_inverse=matrix_inverse(camera);
 			{
 			framebuffer.fragments[x+y*framebuffer.width].color=vector3(1.0,1.0,1.0);
 			framebuffer.fragments[x+y*framebuffer.width].region=material->region;
+			framebuffer.fragments[x+y*framebuffer.width].region_weights[material->region]=1.0;
+			framebuffer.fragments[x+y*framebuffer.width].background_aa=0;
 			continue;
 			}
 		}
@@ -453,7 +462,6 @@ matrix_t camera_inverse=matrix_inverse(camera);
 		vector2_t subsample_point=vector2((i+0.5)/AA_NUM_SAMPLES_U-0.5,(j+0.5)/AA_NUM_SAMPLES_V-0.5);
 		scene_sample_point(&(context->rt_scene),vector2_add(sample_point,subsample_point),camera_inverse,transformed_lights,context->num_lights,&subsample);
 		
-
 		if(subsample.region!=FRAGMENT_UNUSED&&!(outside_sample&&!subsample.background_aa))
 		{
 			if(subsample.background_aa)framebuffer.fragments[x+y*framebuffer.width].background_aa=1;
@@ -470,7 +478,9 @@ matrix_t camera_inverse=matrix_inverse(camera);
 			framebuffer.fragments[k+l*framebuffer.width].region_weights[subsample.region]+=weight;
 			}
 		}
+
 		//printf("%f\n",sum);
+
 		}
 	}
 
@@ -491,7 +501,7 @@ matrix_t camera_inverse=matrix_inverse(camera);
 		total_weight+=weights[i];
 		}
 	framebuffer.fragments[x+y*framebuffer.width].region=total_weight>0.25?region:FRAGMENT_UNUSED;
-		if(!framebuffer.fragments[x+y*framebuffer.width].background_aa)framebuffer.fragments[x+y*framebuffer.width].color=vector3_mult(framebuffer.fragments[x+y*framebuffer.width].color,1.0/total_weight);
+		if(framebuffer.fragments[x+y*framebuffer.width].region!=FRAGMENT_UNUSED&&!framebuffer.fragments[x+y*framebuffer.width].background_aa)framebuffer.fragments[x+y*framebuffer.width].color=vector3_mult(framebuffer.fragments[x+y*framebuffer.width].color,1.0/total_weight);
 	}
 
 

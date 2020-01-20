@@ -125,7 +125,7 @@ output->materials=malloc(scene->mNumMaterials*sizeof(material_t));
 	output->materials[i].region=0;
 	output->materials[i].color=vector3(0.5,0.5,0.5);		
 	output->materials[i].specular_color=vector3(0.5,0.5,0.5);		
-	output->materials[i].specular_hardness=50;
+	output->materials[i].specular_exponent=50;
 	
 	const struct aiMaterial* mat=scene->mMaterials[i];
 
@@ -188,7 +188,7 @@ output->materials=malloc(scene->mNumMaterials*sizeof(material_t));
 	float specular_exponent;
 		if(aiGetMaterialFloatArray(mat,AI_MATKEY_SHININESS,&specular_exponent,NULL)==AI_SUCCESS)
 		{
-		output->materials[i].specular_hardness=(uint32_t)(0.51*specular_exponent+1.5);
+		output->materials[i].specular_exponent=specular_exponent;
 		//printf("%d\n",output->materials[i].specular_hardness);
 		}
 	}

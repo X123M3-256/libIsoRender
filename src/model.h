@@ -25,7 +25,7 @@ typedef struct
 {
 uint8_t flags;
 uint8_t region;
-uint32_t specular_hardness;
+float specular_exponent;
 vector3_t specular_color;
 	union
 	{
