@@ -138,7 +138,15 @@ return vector3_add(matrix_vector(transform.matrix,vector),transform.translation)
 }
 
 
+matrix_t rotate_x(float theta)
+{
+return matrix(1,0,0, 0,cos(theta),-sin(theta), 0,sin(theta),cos(theta));
+}
 matrix_t rotate_y(float theta)
 {
 return matrix(cos(theta),0,sin(theta),0,1,0,-sin(theta),0,cos(theta));
+}
+matrix_t rotate_z(float theta)
+{
+return matrix(cos(theta),-sin(theta),0,sin(theta),cos(theta),0,0,0,1);
 }

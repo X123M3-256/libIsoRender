@@ -48,7 +48,10 @@ matrix_t matrix_inverse(matrix_t matrix);
 matrix_t matrix_transpose(matrix_t matrix);
 matrix_t matrix_mult(matrix_t a,matrix_t b);
 vector3_t matrix_vector(matrix_t matrix,vector3_t vector);
+
+matrix_t rotate_x(float angle);
 matrix_t rotate_y(float angle);
+matrix_t rotate_z(float angle);
 
 transform_t transform(matrix_t matrix,vector3_t vector);
 transform_t transform_compose(transform_t transform,transform_t vector);
