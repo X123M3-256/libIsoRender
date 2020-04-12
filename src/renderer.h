@@ -13,7 +13,7 @@
 #define UNITS_PER_PIXEL 128
 #define FRAGMENT_UNUSED 255
 #define REGION_MASK 0x7
-#define MAX_REGIONS 4
+#define MAX_REGIONS 8
 
 typedef struct //Rect
 	{

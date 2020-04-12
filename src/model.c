@@ -142,7 +142,15 @@ output->materials=malloc(scene->mNumMaterials*sizeof(material_t));
 			{
 			output->materials[i].flags|=MATERIAL_IS_REMAPPABLE;
 			output->materials[i].region=2;
-			}		
+			}
+			else if(strstr(name.data,"Remap3")!=NULL)
+			{
+			output->materials[i].flags|=MATERIAL_IS_REMAPPABLE;
+			output->materials[i].region=3;
+			}
+			else if(strstr(name.data,"Chain1")!=NULL)output->materials[i].region=4;
+			else if(strstr(name.data,"Chain2")!=NULL)output->materials[i].region=5;
+			else if(strstr(name.data,"Chain3")!=NULL)output->materials[i].region=6;
 			if(strstr(name.data,"Mask")!=NULL)output->materials[i].flags|=MATERIAL_IS_MASK;
 			if(strstr(name.data,"NoAO")!=NULL)output->materials[i].flags|=MATERIAL_NO_AO;
 			if(strstr(name.data,"BackgroundAA")!=NULL)output->materials[i].flags|=MATERIAL_BACKGROUND_AA;

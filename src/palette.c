@@ -73,7 +73,7 @@ palette_t palette_rct2()
 {
 palette_t palette={
 0,                            
-{{10,191,false},{243,12,true},{202,12,true},{0,0},{0,0},{0,0},{0,0},{0,0}},
+{{10,191,false},{243,12,true},{202,12,true},{46,12,true},{1,1,false},{2,1,false},{3,1,false},{0,0}},
 {
 {0,0,0},//0
 {0,0,0},
