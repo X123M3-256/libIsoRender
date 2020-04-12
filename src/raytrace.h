@@ -31,6 +31,7 @@ typedef struct
 	uint32_t face_index;
 	vector3_t position;
 	vector3_t normal;
+	float distance;
 	float u,v;
 	}ray_hit_t;
 

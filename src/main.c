@@ -19,7 +19,7 @@ light_t lights[9]={
 {LIGHT_DIFFUSE,0,vector3_normalize(vector3(0.65,0.816,-0.65000000)),0.25},
 {LIGHT_DIFFUSE,0,vector3_normalize(vector3(-1.0,0.0,-1.0)),0.25},
 };
-context_init(&context,lights,9,palette_rct2(),1.5*sqrt(6)/2);
+context_init(&context,lights,9,palette_rct2(),1);
 /*
 vector3_t normals[9]={
 vector3(-0.707107,0.000000,-0.707107),
@@ -65,7 +65,7 @@ putchar('\n');
 
 
 mesh_t mesh;
-	if(mesh_load(&mesh,"rmc_support_barrel_roll.obj"))
+	if(mesh_load(&mesh,"support.obj"))
 	{
 	printf("Failed loading object\n");
 	return 0;

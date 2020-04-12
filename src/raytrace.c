@@ -148,6 +148,7 @@ rtcIntersect1(scene->embree_scene,&context,&rayhit);
 	rtcInterpolate0(rtcGetGeometry(scene->embree_scene,rayhit.hit.geomID),rayhit.hit.primID,rayhit.hit.u,rayhit.hit.v,RTC_BUFFER_TYPE_VERTEX_ATTRIBUTE,0,normal_components,3);
 	hit->position=vector3(position_components[0],position_components[1],position_components[2]);
 	hit->normal=vector3_normalize(vector3(normal_components[0],normal_components[1],normal_components[2]));
+	hit->distance=rayhit.ray.tfar;
 	return 1;
 	}
 return 0;
