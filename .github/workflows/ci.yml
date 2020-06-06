@@ -1,0 +1,38 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: win32
+            triplet: x86-windows
+            arch: x86
+            vcpkgPackages: 'assimp embree3 libpng'
+          - platform: x64
+            arch: x64
+            triplet: x64-windows
+            vcpkgPackages: 'assimp embree3 libpng'
+    env:
+      CONFIGURATION: Release
+      PLATFORM: ${{ matrix.platform }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install vcpkg and packages
+        uses: lukka/run-vcpkg@v2
+        id: runvcpkg
+        with:
+          vcpkgGitCommitId: 2f7a104d4d6f1f3790db929f85a4086aa6973d7f
+          vcpkgTriplet: '${{ matrix.triplet }}'
+          vcpkgArguments: '${{ matrix.vcpkgPackages }}'
+      - name: Upload libs
+        uses: actions/upload-artifact@v2
+        with:
+          name: libs-${{ matrix.triplet }}
+          path: ${{ steps.runvcpkg.outputs.RUNVCPKG_VCPKG_ROOT_OUT }}\\installed\\${{ matrix.triplet }}
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v1.0.0
