@@ -8,7 +8,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: win32
+          - platform: Win32
             triplet: x86-windows
             generator: VS16Win32
             arch: x86
@@ -46,7 +46,7 @@ jobs:
           cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
           useVcpkgToolchainFile: true
           buildDirectory: '${{ runner.workspace }}/build'
-          cmakeAppendedArgs: '-A ${{ matrix.arch }}'
+          cmakeAppendedArgs: '-A ${{ matrix.platform }}'
           vcpkgTriplet: ${{ matrix.triplet}}
           cmakeBuildType: Release
           cmakeGenerator: ${{ matrix.generator }}
