@@ -22,6 +22,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+      - name: Checkout libImage
+        uses: actions/checkout@v2
+        with:
+          repository: 'X123M3-256/libImage'
+          path: '..'
       - name: Install vcpkg and packages
         uses: lukka/run-vcpkg@v2
         id: runvcpkg
@@ -34,5 +39,14 @@ jobs:
         with:
           name: libs-${{ matrix.triplet }}
           path: ${{ steps.runvcpkg.outputs.RUNVCPKG_VCPKG_ROOT_OUT }}\\installed\\${{ matrix.triplet }}
-      - name: Add msbuild to PATH
-        uses: microsoft/setup-msbuild@v1.0.0
+      - name: 'Build with CMake'
+        uses: lukka/run-cmake@v2
+        with:
+          cmakeListsOrSettingsJson: CMakeListsTxtAdvanced
+          useVcpkgToolchainFile: true
+          buildDirectory: '${{ runner.workspace }}/build'
+          cmakeAppendedArgs: '-A x64'
+          vcpkgTriplet: x64-windows
+          cmakeBuildType: Release
+          cmakeGenerator: VS16Win64
+          buildWithCMakeArgs: '--config Release -j 2'
