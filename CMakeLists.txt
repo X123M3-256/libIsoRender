@@ -4,7 +4,7 @@ project (IsoRender C)
 find_package(PNG REQUIRED)
 find_package(embree 3 REQUIRED)
 find_package(assimp CONFIG REQUIRED)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../libImage ${CMAKE_CURRENT_BINARY_DIR}/libImage)
+add_subdirectory(libImage)
 
 if (MSVC) # assumes vcpkg
 set(EMBREE ${EMBREE_LIBRARIES})
