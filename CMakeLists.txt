@@ -7,7 +7,7 @@ find_package(assimp CONFIG REQUIRED)
 add_subdirectory(libImage)
 
 if (MSVC) # assumes vcpkg
-set(EMBREE ${EMBREE_LIBRARIES})
+set(EMBREE embree3)
 set(ASSIMP assimp::assimp)
 set(MATH_LIB "")
 else()
@@ -16,9 +16,10 @@ set(ASSIMP assimp)
 set(MATH_LIB m)
 endif()
 
-include_directories(${PNG_INCLUDE_DIR} ../libImage/src)
+include_directories(${PNG_INCLUDE_DIR} libImage/src)
 link_directories(/usr/local/Cellar/embree/3.6.1/lib)
 link_directories(/usr/local/Cellar/assimp/5.0.0/lib)
+link_directories(${EMBREE_ROOT_DIR}/lib)
 
 add_library(IsoRender STATIC src/vectormath.c src/palette.c src/model.c src/renderer.c src/raytrace.c)
 set_property(TARGET IsoRender PROPERTY C_STANDARD 99)
