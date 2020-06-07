@@ -1,9 +1,21 @@
+#define NOMINMAX
+#define _USE_MATH_DEFINES
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
 #include <assert.h>
 #include <embree3/rtcore.h>
 #include "raytrace.h"
+
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 void rt_error(void* user_ptr,enum RTCError error,const char* str)
 	{

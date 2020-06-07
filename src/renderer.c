@@ -1,3 +1,5 @@
+#define NOMINMAX
+#define _USE_MATH_DEFINES
 #include<stdio.h>
 #include<stdlib.h>
 #include<math.h>
@@ -409,7 +411,7 @@ framebuffer.fragments=malloc(framebuffer.width*framebuffer.height*sizeof(fragmen
 
 
 //Transform lights for view
-light_t transformed_lights[context->num_lights];
+light_t *transformed_lights = malloc(context->num_lights * sizeof(light_t));
 matrix_t view_inverse=matrix_inverse(view);
 	for(int i=0;i<context->num_lights;i++)
 	{
