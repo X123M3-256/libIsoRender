@@ -51,3 +51,8 @@ jobs:
           cmakeBuildType: Release
           cmakeGenerator: ${{ matrix.generator }}
           buildWithCMakeArgs: '--config Release -j 2'
+      - name: Upload binary
+        uses: actions/upload-artifact@v2
+        with:
+          name: bin-${{ matrix.triplet }}
+          path: build\\*.exe
