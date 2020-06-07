@@ -7,10 +7,13 @@
 
 #define NUM_REGIONS 8
 
+#define NUM_SUBREGIONS 4
+
 typedef struct
 {
-uint8_t start_index;
-uint8_t length;
+uint8_t subregions;
+uint8_t start_indices[NUM_SUBREGIONS];
+uint8_t end_indices[NUM_SUBREGIONS];
 bool remap;
 }region_t;
 

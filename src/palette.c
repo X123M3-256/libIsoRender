@@ -44,23 +44,29 @@ return color;
 }
 
 
+
+
 uint8_t palette_get_nearest(palette_t* palette,uint8_t region,vector3_t target,vector3_t* error)
 {
-uint8_t start_index=palette->regions[region].start_index;
-uint8_t end_index=palette->regions[region].start_index+palette->regions[region].length;
 
-uint8_t nearest_index=start_index;
+uint8_t nearest_index=palette->regions[region].start_indices[0];
 float minimum_error=INFINITY;
-	for(int i=start_index;i<end_index;i++)
+int num_subregions=palette->regions[region].subregions;
+	for(int s=0;s<num_subregions;s++)
 	{
-	float error;
-	vector3_t color=vector_from_color(palette->colors[i]);
-		error=vector3_norm(vector3_sub(target,color));
-
-		if(error<minimum_error)
+	uint8_t start_index=palette->regions[region].start_indices[s];
+	uint8_t end_index=palette->regions[region].end_indices[s];
+		for(int i=start_index;i<end_index;i++)
 		{
-		nearest_index=i;
-		minimum_error=error;
+		float error;
+		vector3_t color=vector_from_color(palette->colors[i]);
+			error=vector3_norm(vector3_sub(target,color));
+
+			if(error<minimum_error)
+			{
+			nearest_index=i;
+			minimum_error=error;
+			}
 		}
 	}
 
@@ -73,7 +79,7 @@ palette_t palette_rct2()
 {
 palette_t palette={
 0,                            
-{{10,191,false},{243,12,true},{202,12,true},{46,12,true},{1,1,false},{2,1,false},{3,1,false},{0,0}},
+{{3,{10,214,240,0},{202,227,243,0},false},{1,{243,0,0,0},{255,0,0,0},true},{1,{202,0,0,0},{214,0,0,0},true},{1,{46,0,0,0},{58,0,0,0},true},{3,{10,226,240,0},{22,227,243,0},false},{1,{1,0,0,0},{2,0,0,0},false},{1,{2,0,0,0},{3,0,0,0},false},{1,{3,0,0,0},{4,0,0,0},false}},
 {
 {0,0,0},//0
 {0,0,0},
