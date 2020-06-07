@@ -528,6 +528,7 @@ matrix_t camera_inverse=matrix_inverse(camera);
 framebuffer_save_bmp(&framebuffer,"test.bmp");
 //Convert to indexed color
 image_from_framebuffer(image,&framebuffer,&(context->palette));
+free(transformed_lights);
 }
 
 void context_render_view(context_t* context,matrix_t view,image_t* image)
