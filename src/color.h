@@ -1,6 +1,8 @@
 #ifndef COLOR_H_INCLUDED
 #define COLOR_H_INCLUDED
 
+#include <stdint.h>
+
 typedef struct
 {
 	uint8_t r, g, b;
