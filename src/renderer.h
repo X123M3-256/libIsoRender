@@ -47,12 +47,12 @@ typedef struct //Light
 	}light_t;
 
 typedef struct
-{
-uint16_t width;
-uint16_t height;
-vector2_t offset;
-fragment_t* fragments;
-}framebuffer_t;
+	{
+	uint16_t width;
+	uint16_t height;
+	vector2_t offset;
+	fragment_t* fragments;
+	}framebuffer_t;
 
 typedef struct
 	{

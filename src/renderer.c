@@ -175,7 +175,11 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 	//Check if this is a mask
 		if((scene->mask&(((uint64_t)1)<<hit.mesh_index))||material->flags&MATERIAL_IS_MASK)
 		{
-		return 0;
+		fragment->color=vector3(0,0,0);
+		fragment->depth=hit.distance;
+		fragment->background_aa=material->flags&MATERIAL_BACKGROUND_AA;
+		fragment->region=FRAGMENT_UNUSED;
+		return 1;
 		}
 
 	//Compute surface color
@@ -223,13 +227,13 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 	//Write result
 	fragment->color=vector3_mult(shaded_color,ao_factor);
 	fragment->depth=hit.distance;
-	fragment->background_aa=material->flags&MATERIAL_BACKGROUND_AA;
+	fragment->background_aa=material->flags&(MATERIAL_BACKGROUND_AA|MATERIAL_BACKGROUND_AA_DARK);
 	fragment->region=material->region;
 	return 1;
 	}
 return 0;
 }
-int scene_sample_material(scene_t* scene,vector2_t point,matrix_t camera,material_t** material_out,float* depth_out)
+int scene_sample_material(scene_t* scene,vector2_t point,matrix_t camera,material_t** material_out,float* depth_out,int* is_mask)
 {
 ray_hit_t hit;
 vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
@@ -240,12 +244,10 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 	face_t* face=mesh->faces+hit.face_index;
 	material_t* material=mesh->materials+face->material;
 
-		if(!(scene->mask&(((uint64_t)1)<<hit.mesh_index))&&!(material->flags&MATERIAL_IS_MASK))
-		{
-		*material_out=material;
-		*depth_out=hit.distance;
-		return 1;
-		}
+	*is_mask=(scene->mask&(((uint64_t)1)<<hit.mesh_index))&&!(material->flags&MATERIAL_IS_MASK);
+	*material_out=material;
+	*depth_out=hit.distance;
+	return 1;
 	}
 return 0;
 }
@@ -435,7 +437,6 @@ matrix_t camera_inverse=matrix_inverse(camera);
 	for(int y=0;y<framebuffer.height;y++)
 	for(int x=0;x<framebuffer.width;x++)
 	{
-
 	vector2_t sample_point=vector2_add(vector2(x,y),framebuffer.offset);
 	material_t* material;
 	
@@ -443,18 +444,12 @@ matrix_t camera_inverse=matrix_inverse(camera);
 	int background_aa=0;
 	int region=FRAGMENT_UNUSED;
 	float depth=INFINITY;
-		if(scene_sample_material(&(context->rt_scene),sample_point,camera_inverse,&material,&depth))
+	int mask;
+		if(scene_sample_material(&(context->rt_scene),sample_point,camera_inverse,&material,&depth,&mask))
 		{
-		region=material->region;
-		background_aa=material->flags&MATERIAL_BACKGROUND_AA;
-		//	if(!(material->flags&MATERIAL_BACKGROUND_AA))framebuffer.fragments[x+y*framebuffer.width].background_aa=0;
-			//In silhouette mode no further processing is required
-			if(silhouette)
-			{
-			framebuffer.fragments[x+y*framebuffer.width].color=vector3(1.0,1.0,1.0);
-			framebuffer.fragments[x+y*framebuffer.width].region=region;
-			continue;
-			}
+		region=mask?FRAGMENT_UNUSED:material->region;
+		background_aa=material->flags&(MATERIAL_BACKGROUND_AA|MATERIAL_BACKGROUND_AA_DARK);
+			if(material->flags&MATERIAL_IS_VISIBLE_MASK)mask=1;
 		}
 		
 	//Compute subsamples
@@ -468,7 +463,24 @@ matrix_t camera_inverse=matrix_inverse(camera);
 		subsamples[i+j*AA_NUM_SAMPLES_U].depth=INFINITY;
 
 		vector2_t subsample_point=vector2((i+0.5)/AA_NUM_SAMPLES_U-0.5,(j+0.5)/AA_NUM_SAMPLES_V-0.5);
-		scene_sample_point(&(context->rt_scene),vector2_add(sample_point,subsample_point),camera_inverse,transformed_lights,context->num_lights,subsamples+(i+j*AA_NUM_SAMPLES_U));
+
+			if(!silhouette)
+			{
+			scene_sample_point(&(context->rt_scene),vector2_add(sample_point,subsample_point),camera_inverse,transformed_lights,context->num_lights,subsamples+(i+j*AA_NUM_SAMPLES_U));
+			}
+			else
+			{
+			float subsample_depth=0.0;
+			material_t* subsample_material;
+			int subsample_mask=0;
+				if(scene_sample_material(&(context->rt_scene),vector2_add(sample_point,subsample_point),camera_inverse,&subsample_material,&subsample_depth,&subsample_mask))
+				{
+				subsamples[i+j*AA_NUM_SAMPLES_U].color=vector3(0.5,0.5,0.5);
+				subsamples[i+j*AA_NUM_SAMPLES_U].region=subsample_mask?FRAGMENT_UNUSED:subsample_material->region;
+				subsamples[i+j*AA_NUM_SAMPLES_U].background_aa=subsample_material->flags&(MATERIAL_BACKGROUND_AA|MATERIAL_BACKGROUND_AA_DARK);
+				subsamples[i+j*AA_NUM_SAMPLES_U].depth=subsample_depth;
+				}
+			}
 		}
 			
 	//Get frontmost background AA sample
@@ -483,11 +495,11 @@ matrix_t camera_inverse=matrix_inverse(camera);
 			}
 		}
 	//If there exists a sample forward of the center point with background AA enabled, use that instead of the center point
-		if(front_background_aa_sample!=-1&&min_depth<depth-2)
+		if(front_background_aa_sample!=-1&&(min_depth<depth-2||mask))
 		{
 		region=subsamples[front_background_aa_sample].region;
 		depth=min_depth;
-		background_aa=1;
+		background_aa=subsamples[front_background_aa_sample].background_aa;
 		}
 
 	framebuffer.fragments[x+y*framebuffer.width].region=region;
@@ -506,8 +518,9 @@ matrix_t camera_inverse=matrix_inverse(camera);
 					color=vector3_add(color,vector3_mult(subsamples[i].color,0.25));
 					weight+=0.25;
 					}
-				}	
-			framebuffer.fragments[x+y*framebuffer.width].color=vector3_mult(color,0.5+0.5*weight);
+				}
+				if(background_aa&MATERIAL_BACKGROUND_AA_DARK)framebuffer.fragments[x+y*framebuffer.width].color=vector3_mult(color,0.5+0.5*weight);
+				else framebuffer.fragments[x+y*framebuffer.width].color=color;
 			}
 			else
 			{
