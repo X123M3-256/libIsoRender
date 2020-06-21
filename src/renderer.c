@@ -197,8 +197,6 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 		color=vector3_from_scalar(intensity);
 	 	}
 
-	if(color.x>color.y)printf("%f %f %f\n",color.x,color.y,color.z);
-	
 	//Shade fragment
 	vector3_t shaded_color=shade_fragment(scene,hit.position,hit.normal,view_vector,color,material->specular_color,material->specular_exponent,lights,num_lights);
 	
@@ -538,7 +536,7 @@ matrix_t camera_inverse=matrix_inverse(camera);
 			}
 	}
 
-framebuffer_save_bmp(&framebuffer,"test.bmp");
+//framebuffer_save_bmp(&framebuffer,"test.bmp");
 //Convert to indexed color
 image_from_framebuffer(image,&framebuffer,&(context->palette));
 free(transformed_lights);
