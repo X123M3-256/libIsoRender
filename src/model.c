@@ -160,6 +160,7 @@ output->materials=malloc(scene->mNumMaterials*sizeof(material_t));
 			if(strstr(name.data,"NoAO")!=NULL)output->materials[i].flags|=MATERIAL_NO_AO;
 			if(strstr(name.data,"Edge")!=NULL)output->materials[i].flags|=MATERIAL_BACKGROUND_AA;
 			if(strstr(name.data,"DarkEdge")!=NULL)output->materials[i].flags|=MATERIAL_BACKGROUND_AA_DARK;
+			if(strstr(name.data,"NoBleed")!=NULL)output->materials[i].flags|=MATERIAL_NO_BLEED;
 		//printf("%s\n",name.data);
 		}		
 

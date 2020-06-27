@@ -22,8 +22,9 @@ matrix_t views[4]={{1,0,0,0,1,0,0,0,1},{0,0,1,0,1,0,-1,0,0},{-1,0,0,0,1,0,0,0,-1
 
 #define AO_NUM_SAMPLES_U 8
 #define AO_NUM_SAMPLES_V 4
-#define AA_NUM_SAMPLES_U 2
-#define AA_NUM_SAMPLES_V 2
+#define AA_NUM_SAMPLES_U 4
+#define AA_NUM_SAMPLES_V 4
+#define AA_SAMPLE_WEIGHT (1.0/(AA_NUM_SAMPLES_U*AA_NUM_SAMPLES_V))
 
 void context_init(context_t* context,light_t* lights,uint32_t num_lights,palette_t palette,float upt)
 	{
@@ -177,7 +178,7 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 		{
 		fragment->color=vector3(0,0,0);
 		fragment->depth=hit.distance;
-		fragment->background_aa=material->flags&MATERIAL_BACKGROUND_AA;
+		fragment->flags=material->flags;
 		fragment->region=FRAGMENT_UNUSED;
 		return 1;
 		}
@@ -225,7 +226,7 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 	//Write result
 	fragment->color=vector3_mult(shaded_color,ao_factor);
 	fragment->depth=hit.distance;
-	fragment->background_aa=material->flags&(MATERIAL_BACKGROUND_AA|MATERIAL_BACKGROUND_AA_DARK);
+	fragment->flags=material->flags;
 	fragment->region=material->region;
 	return 1;
 	}
@@ -342,7 +343,7 @@ image->pixels=calloc(image->width*image->height,sizeof(uint8_t));
 			int points[4][2]={{x+step,y},{x-step,y+1},{x,y+1},{x+step,y+1}};
 			float weights[4]={7.0/16.0,3.0/16.0,5.0/16.0,1.0/16.0};
 				for(int i=0;i<4;i++)
-				if(points[i][0]>=0&&points[i][0]<framebuffer->width-1&&points[i][1]>=0&&points[i][1]<framebuffer->height-1)
+				if(points[i][0]>=0&&points[i][0]<framebuffer->width-1&&points[i][1]>=0&&points[i][1]<framebuffer->height-1&&(!(fragment.flags&MATERIAL_NO_BLEED)||(FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).flags&MATERIAL_NO_BLEED)))
 				{		
 				FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).color=vector3_add(vector3_mult(error,0.3*weights[i]),FRAMEBUFFER_INDEX(framebuffer,points[i][0],points[i][1]).color);
 				}
@@ -428,7 +429,7 @@ matrix_t view_inverse=matrix_inverse(view);
 	framebuffer.fragments[i].color=vector3(0.0,0.0,0.0);
 	framebuffer.fragments[i].region=FRAGMENT_UNUSED;
 	framebuffer.fragments[i].depth=0;
-	framebuffer.fragments[i].background_aa=1;
+	framebuffer.fragments[i].flags=0;
 	}
 
 matrix_t camera_inverse=matrix_inverse(camera);
@@ -439,14 +440,14 @@ matrix_t camera_inverse=matrix_inverse(camera);
 	material_t* material;
 	
 	//Test center
-	int background_aa=0;
+	int flags=0;
 	int region=FRAGMENT_UNUSED;
 	float depth=INFINITY;
 	int mask;
 		if(scene_sample_material(&(context->rt_scene),sample_point,camera_inverse,&material,&depth,&mask))
 		{
 		region=mask?FRAGMENT_UNUSED:material->region;
-		background_aa=material->flags&(MATERIAL_BACKGROUND_AA|MATERIAL_BACKGROUND_AA_DARK);
+		flags=material->flags;
 			if(material->flags&MATERIAL_IS_VISIBLE_MASK)mask=1;
 		}
 		
@@ -457,7 +458,7 @@ matrix_t camera_inverse=matrix_inverse(camera);
 		{
 		subsamples[i+j*AA_NUM_SAMPLES_U].color=vector3(0,0,0);//vector3(0.0409151969068532,0.0437350292569735,0.04091519690685320);
 		subsamples[i+j*AA_NUM_SAMPLES_U].region=FRAGMENT_UNUSED;
-		subsamples[i+j*AA_NUM_SAMPLES_U].background_aa=0;
+		subsamples[i+j*AA_NUM_SAMPLES_U].flags=0;
 		subsamples[i+j*AA_NUM_SAMPLES_U].depth=INFINITY;
 
 		vector2_t subsample_point=vector2((i+0.5)/AA_NUM_SAMPLES_U-0.5,(j+0.5)/AA_NUM_SAMPLES_V-0.5);
@@ -475,7 +476,7 @@ matrix_t camera_inverse=matrix_inverse(camera);
 				{
 				subsamples[i+j*AA_NUM_SAMPLES_U].color=vector3(0.5,0.5,0.5);
 				subsamples[i+j*AA_NUM_SAMPLES_U].region=subsample_mask?FRAGMENT_UNUSED:subsample_material->region;
-				subsamples[i+j*AA_NUM_SAMPLES_U].background_aa=subsample_material->flags&(MATERIAL_BACKGROUND_AA|MATERIAL_BACKGROUND_AA_DARK);
+				subsamples[i+j*AA_NUM_SAMPLES_U].flags=subsample_material->flags;
 				subsamples[i+j*AA_NUM_SAMPLES_U].depth=subsample_depth;
 				}
 			}
@@ -486,38 +487,57 @@ matrix_t camera_inverse=matrix_inverse(camera);
 	float min_depth=INFINITY;
 		for(int i=0;i<AA_NUM_SAMPLES_U*AA_NUM_SAMPLES_V;i++)
 		{
-			if(subsamples[i].depth<min_depth&&subsamples[i].background_aa)
+			if(subsamples[i].depth<min_depth&&(subsamples[i].flags&(MATERIAL_BACKGROUND_AA|MATERIAL_BACKGROUND_AA_DARK)))
 			{
 			front_background_aa_sample=i;
 			min_depth=subsamples[i].depth;
 			}
 		}
 	//If there exists a sample forward of the center point with background AA enabled, use that instead of the center point
-		if(front_background_aa_sample!=-1&&(min_depth<depth-2||mask))
+		if(front_background_aa_sample!=-1&&(min_depth<depth-4||mask))
 		{
-		region=subsamples[front_background_aa_sample].region;
-		depth=min_depth;
-		background_aa=subsamples[front_background_aa_sample].background_aa;
+		//Count samples that fall inside the presumed edge
+		int inside_samples=0;
+			for(int i=0;i<AA_NUM_SAMPLES_U*AA_NUM_SAMPLES_V;i++)
+			{
+				if(!(subsamples[i].depth>min_depth+4||subsamples[i].region==FRAGMENT_UNUSED))inside_samples++;
+			}
+		//If more than three samples found, use the forwardmost point
+			if(inside_samples>3)
+			{
+			region=subsamples[front_background_aa_sample].region;
+			depth=min_depth;
+			flags=subsamples[front_background_aa_sample].flags;
+			}
 		}
-
 	framebuffer.fragments[x+y*framebuffer.width].region=region;
+	framebuffer.fragments[x+y*framebuffer.width].flags=flags;
 	//If this is a background pixel, there is no need to compute the color
 		if(region==FRAGMENT_UNUSED)continue;
 
-			if(background_aa)
+			if(flags&(MATERIAL_BACKGROUND_AA|MATERIAL_BACKGROUND_AA_DARK))
 			{
 			//Count samples that fall outside the presumed edge
 			vector3_t color=vector3(0,0,0);
 			float weight=0;
+			float total_weight=0;
+			int inside_samples=0;
 				for(int i=0;i<AA_NUM_SAMPLES_U*AA_NUM_SAMPLES_V;i++)
 				{
-					if(!(subsamples[i].depth>depth+4||subsamples[i].region==FRAGMENT_UNUSED))
+					if(!(subsamples[i].flags&MATERIAL_NO_BLEED)||(flags&MATERIAL_NO_BLEED))
 					{
-					color=vector3_add(color,vector3_mult(subsamples[i].color,0.25));
-					weight+=0.25;
+						if(!(subsamples[i].depth>depth+4||subsamples[i].region==FRAGMENT_UNUSED))//TODO assumes there's only one material with NO_BLEED set 
+						{
+						color=vector3_add(color,vector3_mult(subsamples[i].color,AA_SAMPLE_WEIGHT));
+						weight+=AA_SAMPLE_WEIGHT;
+						
+						inside_samples++;
+						}
+					total_weight+=AA_SAMPLE_WEIGHT;
 					}
 				}
-				if(background_aa&MATERIAL_BACKGROUND_AA_DARK)framebuffer.fragments[x+y*framebuffer.width].color=vector3_mult(color,0.5+0.5*weight);
+			color=vector3_mult(color,1/total_weight);
+				if(flags&MATERIAL_BACKGROUND_AA_DARK)framebuffer.fragments[x+y*framebuffer.width].color=vector3_mult(color,0.5+0.5*(weight/total_weight));
 				else framebuffer.fragments[x+y*framebuffer.width].color=color;
 			}
 			else
@@ -526,17 +546,17 @@ matrix_t camera_inverse=matrix_inverse(camera);
 			float weight=0.0;
 				for(int i=0;i<AA_NUM_SAMPLES_U*AA_NUM_SAMPLES_V;i++)
 				{
-					if(subsamples[i].region!=FRAGMENT_UNUSED)
+					if(subsamples[i].region!=FRAGMENT_UNUSED&&(!(subsamples[i].flags&MATERIAL_NO_BLEED)||(flags&MATERIAL_NO_BLEED)))
 					{
-					color=vector3_add(color,vector3_mult(subsamples[i].color,0.25));
-					weight+=0.25;
+					color=vector3_add(color,vector3_mult(subsamples[i].color,AA_SAMPLE_WEIGHT));
+					weight+=AA_SAMPLE_WEIGHT;
 					}
 				}
 			framebuffer.fragments[x+y*framebuffer.width].color=vector3_mult(color,1.0/weight);
 			}
 	}
 
-//framebuffer_save_bmp(&framebuffer,"test.bmp");
+framebuffer_save_bmp(&framebuffer,"test.bmp");
 //Convert to indexed color
 image_from_framebuffer(image,&framebuffer,&(context->palette));
 free(transformed_lights);
