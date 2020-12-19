@@ -27,6 +27,7 @@ typedef struct //Fragment
 	{
 	vector3_t color;
 	float depth;
+	float ghost_depth;
 	uint8_t flags;
 	uint8_t region;
 	}fragment_t;

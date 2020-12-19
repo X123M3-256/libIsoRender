@@ -44,6 +44,7 @@ void scene_init(scene_t* scene,device_t device)
 {
 scene->num_meshes=0;
 scene->mask=0;
+scene->ghost=0;
 scene->embree_device=device;
 scene->embree_scene=rtcNewScene(device);
 scene->x_max=-INFINITY;
@@ -75,12 +76,13 @@ return x>=y?x:y;
 }
 
 
-void scene_add_model(scene_t* scene,mesh_t* mesh,vertex_t (*transform)(vector3_t,vector3_t,void*),void* data,int mask)
+void scene_add_model(scene_t* scene,mesh_t* mesh,vertex_t (*transform)(vector3_t,vector3_t,void*),void* data,int flags)
 	{
 	//Add mesh to list of meshes
 	assert(scene->num_meshes<MAX_MESHES);
 	scene->meshes[scene->num_meshes]=mesh;
-		if(mask)scene->mask|=((uint64_t)1)<<scene->num_meshes;
+		if(flags&MESH_MASK)scene->mask|=((uint64_t)1)<<scene->num_meshes;
+		if(flags&MESH_GHOST)scene->ghost|=((uint64_t)1)<<scene->num_meshes;
 	scene->num_meshes++;
 	//Create Embree geometry
 	RTCGeometry geom=rtcNewGeometry(scene->embree_device,RTC_GEOMETRY_TYPE_TRIANGLE);
@@ -147,12 +149,28 @@ rayhit.hit.instID[0]=RTC_INVALID_GEOMETRY_ID;
 
 rtcIntersect1(scene->embree_scene,&context,&rayhit);
 
+hit->ghost_distance=rayhit.ray.tfar;
+
+	//If we hit ghost mesh, keep tracing
+	while((rayhit.hit.geomID!=RTC_INVALID_GEOMETRY_ID)&&scene->ghost&(((uint64_t)1)<<rayhit.hit.geomID))
+	{
+	//printf("GeomID %d Distance %f\n",rayhit.hit.geomID,rayhit.ray.tfar);
+	rayhit.ray.tnear=rayhit.ray.tfar+0.0001;
+	rayhit.ray.tfar=INFINITY;
+	rayhit.hit.geomID=RTC_INVALID_GEOMETRY_ID;
+	rayhit.hit.instID[0]=RTC_INVALID_GEOMETRY_ID;
+	rtcIntersect1(scene->embree_scene,&context,&rayhit);
+	}
+
+
 	if(rayhit.hit.geomID != RTC_INVALID_GEOMETRY_ID)
 	{
 	hit->mesh_index=rayhit.hit.geomID;
 	hit->face_index=rayhit.hit.primID;
 	hit->u=rayhit.hit.u;
 	hit->v=rayhit.hit.v;
+
+
 	//Interpolate normal
 	float position_components[3];
 	float normal_components[3];

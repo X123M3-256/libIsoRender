@@ -226,13 +226,15 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 	//Write result
 	fragment->color=vector3_mult(shaded_color,ao_factor);
 	fragment->depth=hit.distance;
+	fragment->ghost_depth=hit.ghost_distance;
 	fragment->flags=material->flags;
 	fragment->region=material->region;
 	return 1;
 	}
+fragment->ghost_depth=hit.ghost_distance;
 return 0;
 }
-int scene_sample_material(scene_t* scene,vector2_t point,matrix_t camera,material_t** material_out,float* depth_out,int* is_mask)
+int scene_sample_material(scene_t* scene,vector2_t point,matrix_t camera,material_t** material_out,float* depth_out,float* ghost_depth_out,int* is_mask)
 {
 ray_hit_t hit;
 vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
@@ -246,8 +248,10 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 	*is_mask=(scene->mask&(((uint64_t)1)<<hit.mesh_index))&&!(material->flags&MATERIAL_IS_MASK);
 	*material_out=material;
 	*depth_out=hit.distance;
+	*ghost_depth_out=hit.ghost_distance;
 	return 1;
 	}
+*ghost_depth_out=hit.ghost_distance;
 return 0;
 }
 
@@ -451,8 +455,9 @@ matrix_t camera_inverse=matrix_inverse(camera);
 	int flags=0;
 	int region=FRAGMENT_UNUSED;
 	float depth=INFINITY;
+	float ghost_depth=INFINITY;
 	int mask=0;
-		if(scene_sample_material(&(context->rt_scene),sample_point,camera_inverse,&material,&depth,&mask))
+		if(scene_sample_material(&(context->rt_scene),sample_point,camera_inverse,&material,&depth,&ghost_depth,&mask))
 		{
 		region=mask?FRAGMENT_UNUSED:material->region;
 		flags=material->flags;
@@ -478,14 +483,16 @@ matrix_t camera_inverse=matrix_inverse(camera);
 			else
 			{
 			float subsample_depth=0.0;
+			float subsample_ghost_depth=0.0;
 			material_t* subsample_material;
 			int subsample_mask=0;
-				if(scene_sample_material(&(context->rt_scene),vector2_add(sample_point,subsample_point),camera_inverse,&subsample_material,&subsample_depth,&subsample_mask))
+				if(scene_sample_material(&(context->rt_scene),vector2_add(sample_point,subsample_point),camera_inverse,&subsample_material,&subsample_depth,&subsample_ghost_depth,&subsample_mask))
 				{
 				subsamples[i+j*AA_NUM_SAMPLES_U].color=vector3(0.5,0.5,0.5);
 				subsamples[i+j*AA_NUM_SAMPLES_U].region=subsample_mask?FRAGMENT_UNUSED:subsample_material->region;
 				subsamples[i+j*AA_NUM_SAMPLES_U].flags=subsample_material->flags;
 				subsamples[i+j*AA_NUM_SAMPLES_U].depth=subsample_depth;
+				subsamples[i+j*AA_NUM_SAMPLES_U].ghost_depth=subsample_ghost_depth;
 				}
 			}
 		}
@@ -502,8 +509,9 @@ matrix_t camera_inverse=matrix_inverse(camera);
 			}
 		}
 
+	
 	//If there exists a sample forward of the center point with background AA enabled, use that instead of the center point
-		if(front_background_aa_sample!=-1&&(min_depth<depth-4||mask))
+		if(front_background_aa_sample!=-1&&(min_depth<ghost_depth-4||mask))
 		{
 		//Count samples that fall inside the presumed edge
 		int inside_samples=0;
@@ -538,7 +546,7 @@ matrix_t camera_inverse=matrix_inverse(camera);
 			int inside_samples=0;
 				for(int i=0;i<AA_NUM_SAMPLES_U*AA_NUM_SAMPLES_V;i++)
 				{
-					if(!(subsamples[i].flags&MATERIAL_NO_BLEED)||(flags&MATERIAL_NO_BLEED))
+					if((!(subsamples[i].flags&MATERIAL_NO_BLEED)||(flags&MATERIAL_NO_BLEED))&&!((subsamples[i].ghost_depth<=depth+4&&subsamples[i].depth>depth+4)))
 					{
 						if(!(subsamples[i].depth>depth+4||(subsamples[i].region==FRAGMENT_UNUSED&&!subsamples[i].flags&MATERIAL_IS_MASK)||(subsamples[i].flags&MATERIAL_IS_VISIBLE_MASK)))//TODO assumes there's only one material with NO_BLEED set 
 						{
