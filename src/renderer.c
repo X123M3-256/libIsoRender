@@ -178,7 +178,7 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 		{
 		fragment->color=vector3(0,0,0);
 		fragment->depth=hit.distance;
-		fragment->flags=material->flags;
+		fragment->flags=material->flags|MATERIAL_IS_MASK;
 		fragment->region=FRAGMENT_UNUSED;
 		return 1;
 		}
@@ -264,6 +264,14 @@ return rect((int)fmin(r.x_lower,floor(x)),(int)fmax(r.x_upper,ceil(x)),
 
 rect_t scene_get_bounds(scene_t* scene,matrix_t camera)
 {
+/*
+rect_t bounds;
+bounds.x_lower=-128;
+bounds.x_upper=128;
+bounds.y_lower=-128;
+bounds.y_upper=128;
+return bounds;
+*/
 vector3_t bounding_points[8]={
 vector3(scene->x_min,scene->y_min,scene->z_min),
 vector3(scene->x_max,scene->y_min,scene->z_min),
@@ -443,7 +451,7 @@ matrix_t camera_inverse=matrix_inverse(camera);
 	int flags=0;
 	int region=FRAGMENT_UNUSED;
 	float depth=INFINITY;
-	int mask;
+	int mask=0;
 		if(scene_sample_material(&(context->rt_scene),sample_point,camera_inverse,&material,&depth,&mask))
 		{
 		region=mask?FRAGMENT_UNUSED:material->region;
@@ -493,6 +501,7 @@ matrix_t camera_inverse=matrix_inverse(camera);
 			min_depth=subsamples[i].depth;
 			}
 		}
+
 	//If there exists a sample forward of the center point with background AA enabled, use that instead of the center point
 		if(front_background_aa_sample!=-1&&(min_depth<depth-4||mask))
 		{
@@ -500,7 +509,7 @@ matrix_t camera_inverse=matrix_inverse(camera);
 		int inside_samples=0;
 			for(int i=0;i<AA_NUM_SAMPLES_U*AA_NUM_SAMPLES_V;i++)
 			{
-				if(!(subsamples[i].depth>min_depth+4||subsamples[i].region==FRAGMENT_UNUSED))inside_samples++;
+				if(!(subsamples[i].depth>min_depth+4||(subsamples[i].region==FRAGMENT_UNUSED&&!subsamples[i].flags&MATERIAL_IS_MASK)||(subsamples[i].flags&MATERIAL_IS_VISIBLE_MASK)))inside_samples++;
 			}
 		//If more than three samples found, use the forwardmost point
 			if(inside_samples>3)
@@ -512,8 +521,13 @@ matrix_t camera_inverse=matrix_inverse(camera);
 		}
 	framebuffer.fragments[x+y*framebuffer.width].region=region;
 	framebuffer.fragments[x+y*framebuffer.width].flags=flags;
+
+
 	//If this is a background pixel, there is no need to compute the color
 		if(region==FRAGMENT_UNUSED)continue;
+
+
+
 
 			if(flags&(MATERIAL_BACKGROUND_AA|MATERIAL_BACKGROUND_AA_DARK))
 			{
@@ -526,7 +540,7 @@ matrix_t camera_inverse=matrix_inverse(camera);
 				{
 					if(!(subsamples[i].flags&MATERIAL_NO_BLEED)||(flags&MATERIAL_NO_BLEED))
 					{
-						if(!(subsamples[i].depth>depth+4||subsamples[i].region==FRAGMENT_UNUSED))//TODO assumes there's only one material with NO_BLEED set 
+						if(!(subsamples[i].depth>depth+4||(subsamples[i].region==FRAGMENT_UNUSED&&!subsamples[i].flags&MATERIAL_IS_MASK)||(subsamples[i].flags&MATERIAL_IS_VISIBLE_MASK)))//TODO assumes there's only one material with NO_BLEED set 
 						{
 						color=vector3_add(color,vector3_mult(subsamples[i].color,AA_SAMPLE_WEIGHT));
 						weight+=AA_SAMPLE_WEIGHT;
