@@ -152,9 +152,7 @@ output->materials=malloc(scene->mNumMaterials*sizeof(material_t));
 			{
 			output->materials[i].region=4;
 			}
-			else if(strstr(name.data,"Chain1")!=NULL)output->materials[i].region=5;
-			else if(strstr(name.data,"Chain2")!=NULL)output->materials[i].region=6;
-			else if(strstr(name.data,"Chain3")!=NULL)output->materials[i].region=7;
+			else if(strstr(name.data,"Peep")!=NULL)output->materials[i].region=5;
 			if(strstr(name.data,"VisibleMask")!=NULL)output->materials[i].flags|=MATERIAL_IS_VISIBLE_MASK;
 			else if(strstr(name.data,"Mask")!=NULL)output->materials[i].flags|=MATERIAL_IS_MASK;
 			if(strstr(name.data,"NoAO")!=NULL)output->materials[i].flags|=MATERIAL_NO_AO;
