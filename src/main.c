@@ -8,6 +8,19 @@ int main()
 {
 context_t context;
 //vector3(0.65190909243,0.38733586252+0.2,-0.65190909243)
+/*
+light_t lights[9]={
+{LIGHT_DIFFUSE,0,vector3_normalize(vector3(0.0,-1.0,0.0)),0.25},//Bottom
+{LIGHT_DIFFUSE,0,vector3_normalize(vector3(1.0,0.3,0.0)),0.32},//Back right
+{LIGHT_SPECULAR,0,vector3_normalize(vector3(1,0.63,-1)),1.0},//Main specular
+{LIGHT_DIFFUSE,0,vector3_normalize(vector3(1,0.63,-1)),0.8},//Main light
+{LIGHT_DIFFUSE,0,vector3(0.0,1.0,0.0),1.0},//Top
+{LIGHT_DIFFUSE,0,vector3_normalize(vector3(-1.0,0.0,0.0)),0.00},//Left
+{LIGHT_DIFFUSE,0,vector3_normalize(vector3(0.0,1.0,1.0)),0.2},//Back left
+{LIGHT_DIFFUSE,0,vector3_normalize(vector3(0.65,0.816,-0.65000000)),0.25},//Front right
+{LIGHT_DIFFUSE,0,vector3_normalize(vector3(-1.0,0.0,-1.0)),0.35},//Front
+};
+*/
 light_t lights[9]={
 {LIGHT_DIFFUSE,0,vector3_normalize(vector3(0.0,-1.0,0.0)),0.25},//Bottom
 {LIGHT_DIFFUSE,0,vector3_normalize(vector3(1.0,0.3,0.0)),0.32},//Back right
@@ -66,7 +79,7 @@ putchar('\n');
 
 
 mesh_t mesh_base;
-	if(mesh_load(&mesh_base,"../TrackRender/tracks/raptor/raptor.obj"))
+	if(mesh_load(&mesh_base,"peep.obj"))
 	{
 	printf("Failed loading object\n");
 	return 0;
@@ -74,14 +87,12 @@ mesh_t mesh_base;
 
 context_begin_render(&context);
 context_add_model(&context,&mesh_base,transform(views[0],vector3(0,0,0)),0);
-context_add_model(&context,&mesh_base,transform(views[0],vector3(0,0,3.3)),MESH_GHOST);
-context_add_model(&context,&mesh_base,transform(views[0],vector3(0,0,-3.3)),MESH_GHOST);
 context_finalize_render(&context);
 image_t images[4];
-	for(int i=0;i<1;i++)context_render_view(&context,views[i],images+i);
+	for(int i=0;i<4;i++)context_render_view(&context,views[i],images+i);
 context_end_render(&context);
 
-	for(int i=0;i<1;i++)
+	for(int i=0;i<4;i++)
 	{
 	char iamastupididiot[16];
 	sprintf(iamastupididiot,"test_%d.png",i);
