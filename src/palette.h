@@ -22,6 +22,7 @@ typedef struct
 uint8_t transparent_index;
 region_t regions[NUM_REGIONS];
 color_t colors[256];
+color_t remap_colors[16];
 }palette_t;
 
 color_t color(uint8_t r,uint8_t g,uint8_t b);
