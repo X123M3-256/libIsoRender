@@ -64,6 +64,7 @@ int texture_load_png(texture_t* texture,const char* filename);
 void texture_destroy(texture_t* texture);
 
 int mesh_load(mesh_t* mesh,const char* filename);
+int mesh_load_transform(mesh_t* output,const char* filename,matrix_t matrix);
 void mesh_destroy(mesh_t* mesh);
 
 #endif // MODEL_H_INCLUDED

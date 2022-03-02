@@ -104,10 +104,16 @@ void texture_destroy(texture_t* texture)
 
 
 
-
-int mesh_load(mesh_t* output,const char* filename)
+int mesh_load_transform(mesh_t* output,const char* filename,matrix_t matrix)
 {
-const struct aiScene* scene = aiImportFile(filename,aiProcess_Triangulate|aiProcess_JoinIdenticalVertices|aiProcess_GenNormals);
+int import_flags=aiProcess_Triangulate|aiProcess_JoinIdenticalVertices|aiProcess_GenNormals;
+
+//Check if the input transformation mirrors the scene
+double determinant=matrix_determinant(matrix);
+	if(fabs(fabs(determinant)-1.0)>0.001)printf("Warning: transformation matrix is not orthonormal\n");
+	if(determinant<0)import_flags|=aiProcess_FlipWindingOrder;
+
+const struct aiScene* scene = aiImportFile(filename,import_flags);
 
 	if(!scene)
 	{
@@ -232,8 +238,8 @@ uint32_t mesh_start_face=0;
 	
 		for(uint32_t i=0;i<mesh->mNumVertices;i++)
 		{
-		output->vertices[mesh_start_vertex+i]=vector3(mesh->mVertices[i].x,mesh->mVertices[i].y,mesh->mVertices[i].z);
-		output->normals[mesh_start_vertex+i]=vector3(mesh->mNormals[i].x,mesh->mNormals[i].y,mesh->mNormals[i].z);
+		output->vertices[mesh_start_vertex+i]=matrix_vector(matrix,vector3(mesh->mVertices[i].x,mesh->mVertices[i].y,mesh->mVertices[i].z));
+		output->normals[mesh_start_vertex+i]=matrix_vector(matrix,vector3(mesh->mNormals[i].x,mesh->mNormals[i].y,mesh->mNormals[i].z));
 			if(mesh->mTextureCoords[0])
 			{
 			output->uvs[mesh_start_vertex+i]=vector2(mesh->mTextureCoords[0][i].x,mesh->mTextureCoords[0][i].y);
@@ -269,3 +275,10 @@ free(mesh->normals);
 free(mesh->faces);
 free(mesh->materials);
 }
+
+
+int mesh_load(mesh_t* output,const char* filename)
+{
+mesh_load_transform(output,filename,matrix_identity());
+}
+
