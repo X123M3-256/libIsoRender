@@ -127,13 +127,13 @@ void scene_add_model(scene_t* scene,mesh_t* mesh,vertex_t (*transform)(vector3_t
 	rtcReleaseGeometry(geom);
 	}
 
-
 int scene_trace_ray(scene_t* scene,vector3_t origin,vector3_t direction,ray_hit_t* hit)
 {
 struct RTCIntersectContext context;
 rtcInitIntersectContext(&context);
 
 struct RTCRayHit rayhit;
+
 rayhit.ray.org_x=origin.x;
 rayhit.ray.org_y=origin.y;
 rayhit.ray.org_z=origin.z;
@@ -142,7 +142,7 @@ rayhit.ray.dir_y=direction.y;
 rayhit.ray.dir_z=direction.z;
 rayhit.ray.tnear=0;
 rayhit.ray.tfar=INFINITY;
-rayhit.ray.mask=0;
+rayhit.ray.mask=-1;
 rayhit.ray.flags=0;
 rayhit.hit.geomID=RTC_INVALID_GEOMETRY_ID;
 rayhit.hit.instID[0]=RTC_INVALID_GEOMETRY_ID;
@@ -198,7 +198,7 @@ ray.dir_y=direction.y;
 ray.dir_z=direction.z;
 ray.tnear=1e-5;
 ray.tfar=INFINITY;
-ray.mask=0;
+ray.mask=-1;
 ray.flags=0;
 
 rtcOccluded1(scene->embree_scene,&context,&ray);
