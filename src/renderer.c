@@ -194,7 +194,7 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 	//Remappable colors should be rendered as grayscale
 		if(material->flags&MATERIAL_IS_REMAPPABLE)
 		{
-		float intensity=fmax(fmax(material->color.x,material->color.y),material->color.z);
+		float intensity=fmax(fmax(color.x,color.y),color.z);
 		color=vector3_from_scalar(intensity);
 	 	}
 
@@ -238,9 +238,9 @@ int scene_sample_material(scene_t* scene,vector2_t point,matrix_t camera,materia
 {
 ray_hit_t hit;
 vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
+
 	if(scene_trace_ray(scene,matrix_vector(camera,vector3(point.x,point.y,-512)),vector3_mult(view_vector,-1),&hit))
 	{
-	
 	mesh_t* mesh=scene->meshes[hit.mesh_index];
 	face_t* face=mesh->faces+hit.face_index;
 	material_t* material=mesh->materials+face->material;
@@ -443,6 +443,7 @@ matrix_t view_inverse=matrix_inverse(view);
 	framebuffer.fragments[i].depth=0;
 	framebuffer.fragments[i].flags=0;
 	}
+
 
 matrix_t camera_inverse=matrix_inverse(camera);
 	for(int y=0;y<framebuffer.height;y++)
