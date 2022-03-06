@@ -91,8 +91,12 @@ return fmax(0.0,fmin(1.0,coord-floor(coord)));
 
 vector3_t texture_sample(texture_t* texture,vector2_t coord)
 	{
-	uint16_t tex_x=(uint32_t)(texture->width*wrap_coord(coord.x));
-	uint16_t tex_y=(uint32_t)(texture->height*wrap_coord(coord.y));
+	uint16_t tex_x=(uint32_t)(texture->width*wrap_coord(coord.x)-0.5);
+	uint16_t tex_y=(uint32_t)(texture->height*wrap_coord(coord.y)-0.5);
+		if(tex_x>=texture->width)
+		{
+		printf("X: %d Width\n",tex_x,texture->width);
+		}
 	assert(tex_x<texture->width&&tex_y<texture->height);
 	return texture->pixels[tex_y*texture->width+tex_x];
 	}
