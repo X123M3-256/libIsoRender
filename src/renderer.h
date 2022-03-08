@@ -1,6 +1,6 @@
 #ifndef RENDERER_H_INCLUDED
 #define RENDERER_H_INCLUDED
-#include <image.h>
+#include "image.h"
 #include "model.h"
 #include "palette.h"
 #include "raytrace.h"
