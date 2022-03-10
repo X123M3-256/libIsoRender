@@ -6,6 +6,7 @@
 #include <string.h>
 #include <assert.h>
 #include "image.h"
+#include "sort_r.h"
 
 typedef struct
 {
@@ -93,7 +94,7 @@ int pack_rects_fixed_with_comparator(image_t* images,int num_images,int width,in
 //printf("Size %d %d\n",width,height);
 int* permutation=calloc(num_images,sizeof(int));
 	for(int i=0;i<num_images;i++)permutation[i]=i;
-qsort_r(permutation,num_images,sizeof(int),compare,images);
+sort_r(permutation,num_images,sizeof(int),compare,images);
 
 int max_empty_spaces=10000;
 int num_empty_spaces=1;
