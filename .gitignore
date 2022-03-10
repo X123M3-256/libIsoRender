@@ -1,0 +1,8 @@
+CMakeCache.txt
+libIsoRender.a
+TestIsoRender.exe
+.ninja_deps
+.ninja_log
+build.ninja
+CMakeFiles
+cmake_install.cmake
