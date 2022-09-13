@@ -457,45 +457,6 @@ int y_max=INT32_MIN;
 	}
 }
 
-
-//TODO proper error  handling
-/*void image_write_bmp(image_t* image,FILE* file)
-{
-int padding=(4-(image->width*3)%4)%4;
-
-int pixels_size=image->height*(image->width*3+padding);
-
-uint8_t bitmap_header[54];
-memset(bitmap_header,0,54);
-
-bitmap_header[0]='B';
-bitmap_header[1]='M';
-*((uint32_t*)(bitmap_header+2))=54+pixels_size;
-*((uint32_t*)(bitmap_header+10))=54;
-*((uint32_t*)(bitmap_header+14))=40;
-*((uint32_t*)(bitmap_header+18))=image->width;
-*((uint32_t*)(bitmap_header+22))=image->height;
-*((uint16_t*)(bitmap_header+26))=1;
-*((uint16_t*)(bitmap_header+28))=24;
-*((uint32_t*)(bitmap_header+38))=2834;
-*((uint32_t*)(bitmap_header+42))=2834;
-
-fwrite(bitmap_header,1,54,file);
-
-    for(int y=image->height-1;y>=0;y--)
-    {
-        for(int x=0;x<image->width;x++)
-        {
-        uint8_t index=image->pixels[x+image->width*y];
-        fputc(palette[index][2],file);
-        fputc(palette[index][1],file);
-        fputc(palette[index][0],file);
-        }
-        for(int k=0;k<padding;k++)fputc(0,file);
-    }
-//return ERROR_NONE;
-}*/
-
 void image_destroy(image_t* image)
 {
 free(image->pixels);
