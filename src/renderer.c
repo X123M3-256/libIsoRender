@@ -174,9 +174,9 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 	material_t* material=mesh->materials+face->material;
 
 	//Check if this is a mask
-		if((scene->mask&(((uint64_t)1)<<hit.mesh_index))||material->flags&MATERIAL_IS_MASK)
+		if(scene_is_mask(scene,hit.mesh_index)||material->flags&MATERIAL_IS_MASK)
 		{
-		fragment->color=vector3(0,0,0);
+		fragment->color=vector3(0,1,0);
 		fragment->depth=hit.distance;
 		fragment->flags=material->flags|MATERIAL_IS_MASK;
 		fragment->region=FRAGMENT_UNUSED;
@@ -245,7 +245,7 @@ vector3_t view_vector=matrix_vector(camera,vector3(0,0,-1));
 	face_t* face=mesh->faces+hit.face_index;
 	material_t* material=mesh->materials+face->material;
 
-	*is_mask=(scene->mask&(((uint64_t)1)<<hit.mesh_index))&&!(material->flags&MATERIAL_IS_MASK);
+	*is_mask=scene_is_mask(scene,hit.mesh_index)||(material->flags&MATERIAL_IS_MASK);
 	*material_out=material;
 	*depth_out=hit.distance;
 	*ghost_depth_out=hit.ghost_distance;
@@ -462,9 +462,8 @@ matrix_t camera_inverse=matrix_inverse(camera);
 		{
 		region=mask?FRAGMENT_UNUSED:material->region;
 		flags=material->flags;
-			if(material->flags&MATERIAL_IS_VISIBLE_MASK)mask=1;
+			if(material->flags&MATERIAL_IS_VISIBLE_MASK)mask=1;//TODO seems redundant?
 		}
-		
 	//Compute subsamples
 	fragment_t subsamples[AA_NUM_SAMPLES_U*AA_NUM_SAMPLES_V];
 		for(int i=0;i<AA_NUM_SAMPLES_U;i++)
@@ -530,7 +529,6 @@ matrix_t camera_inverse=matrix_inverse(camera);
 		}
 	framebuffer.fragments[x+y*framebuffer.width].region=region;
 	framebuffer.fragments[x+y*framebuffer.width].flags=flags;
-
 
 	//If this is a background pixel, there is no need to compute the color
 		if(region==FRAGMENT_UNUSED)continue;

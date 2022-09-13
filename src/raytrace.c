@@ -17,6 +17,8 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+ //&& rayhit.hit.Ng_x*direction.x+rayhit.hit.Ng_y*direction.y+rayhit.hit.Ng_z*direction.z<0
+
 void rt_error(void* user_ptr,enum RTCError error,const char* str)
 	{
 	printf("error %d: %s\n", error, str);
@@ -40,11 +42,44 @@ void device_destroy(device_t device)
 	rtcReleaseDevice(device);
 	}
 
+void bitset_zero(uint64_t* bitset)
+{
+bitset[0]=0;
+bitset[1]=0;
+}
+
+int bitset_set(uint64_t* bitset,int bit)
+{
+assert(bit<128);
+	if(bit<64)bitset[0]|=1ULL<<bit;
+	else bitset[1]|=1ULL<<(bit-64);
+}
+
+int bitset_test(uint64_t* bitset,int bit)
+{
+assert(bit<128);
+	if(bit<64)return bitset[0]&(1ULL<<bit)?1:0;
+	else return bitset[1]&(1ULL<<(bit-64))?1:0;
+}
+
+int scene_is_mask(scene_t* scene,int index)
+{
+return bitset_test(scene->mask,index);
+}
+
+
+int scene_is_ghost(scene_t* scene,int index)
+{
+return bitset_test(scene->ghost,index);
+}
+
 void scene_init(scene_t* scene,device_t device)
 {
 scene->num_meshes=0;
-scene->mask=0;
-scene->ghost=0;
+scene->mask[0]=0;
+scene->mask[1]=0;
+scene->ghost[0]=0;
+scene->ghost[1]=0;
 scene->embree_device=device;
 scene->embree_scene=rtcNewScene(device);
 scene->x_max=-INFINITY;
@@ -76,13 +111,27 @@ return x>=y?x:y;
 }
 
 
+
+void occlusionFilter(const struct RTCFilterFunctionNArguments* args)
+{
+//Check that packet size is 1 (I think this is guaranteed?)
+const unsigned int N = args->N;
+assert(N == 1);
+
+struct RTCRay* ray=(struct RTCRay*)args->ray;
+struct RTCHit* hit=(struct RTCHit*)args->hit;
+
+	if(hit->Ng_x*ray->dir_x+hit->Ng_y*ray->dir_y+hit->Ng_z*ray->dir_z>0)args->valid[0]=0;
+
+}
+
 void scene_add_model(scene_t* scene,mesh_t* mesh,vertex_t (*transform)(vector3_t,vector3_t,void*),void* data,int flags)
 	{
 	//Add mesh to list of meshes
 	assert(scene->num_meshes<MAX_MESHES);
 	scene->meshes[scene->num_meshes]=mesh;
-		if(flags&MESH_MASK)scene->mask|=((uint64_t)1)<<scene->num_meshes;
-		if(flags&MESH_GHOST)scene->ghost|=((uint64_t)1)<<scene->num_meshes;
+		if(flags&MESH_MASK)bitset_set(scene->mask,scene->num_meshes);
+		if(flags&MESH_GHOST)bitset_set(scene->ghost,scene->num_meshes);
 	scene->num_meshes++;
 	//Create Embree geometry
 	RTCGeometry geom=rtcNewGeometry(scene->embree_device,RTC_GEOMETRY_TYPE_TRIANGLE);
@@ -121,6 +170,7 @@ void scene_add_model(scene_t* scene,mesh_t* mesh,vertex_t (*transform)(vector3_t
 		indices[3*i+1]=mesh->faces[i].indices[1];
 		indices[3*i+2]=mesh->faces[i].indices[2];
 		}
+	rtcSetGeometryOccludedFilterFunction(geom,occlusionFilter);
 	rtcCommitGeometry(geom);
 	//Add geometry to scene
 	rtcAttachGeometry(scene->embree_scene,geom);
@@ -152,7 +202,7 @@ rtcIntersect1(scene->embree_scene,&context,&rayhit);
 hit->ghost_distance=rayhit.ray.tfar;
 
 	//If we hit ghost mesh, keep tracing
-	while((rayhit.hit.geomID!=RTC_INVALID_GEOMETRY_ID)&&scene->ghost&(((uint64_t)1)<<rayhit.hit.geomID))
+	while((rayhit.hit.geomID!=RTC_INVALID_GEOMETRY_ID)&&scene_is_ghost(scene,rayhit.hit.geomID))
 	{
 	//printf("GeomID %d Distance %f\n",rayhit.hit.geomID,rayhit.ray.tfar);
 	rayhit.ray.tnear=rayhit.ray.tfar+0.0001;
