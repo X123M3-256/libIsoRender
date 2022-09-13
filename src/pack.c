@@ -280,3 +280,51 @@ int used_pixels=0;
 printf("Width %d Height %d\n",width,height);
 printf("Packing efficiency %.1f%\n",(100.0*used_pixels)/(width*height));
 }
+
+
+
+
+
+void image_create_grid(image_t* output,image_t* images,int num_images,int* x_coords,int* y_coords,int columns)
+{
+int x_min=0;
+int x_max=0;
+int y_min=0;
+int y_max=0;
+
+	for(int i=0;i<num_images;i++)
+	{
+	int x_neg=images[i].x_offset;
+	int x_pos=images[i].width+images[i].x_offset;
+		if(x_neg<x_min)x_min=x_neg;
+		if(x_pos>x_max)x_max=x_pos;
+	int y_neg=images[i].y_offset;
+	int y_pos=images[i].height+images[i].y_offset;
+		if(y_neg<y_min)y_min=y_neg;
+		if(y_pos>y_max)y_max=y_pos;
+	}
+
+int column_width=x_max-x_min;
+int row_height=y_max-y_min;
+
+int rows=num_images/columns;
+	if(num_images%columns!=0)rows++;
+
+int width=column_width*columns;
+int height=row_height*rows;
+
+
+image_new(output,width,height,0,0,0);
+memset(output->pixels,0,width*height);
+
+	for(int i=0;i<num_images;i++)
+	{
+	int row=i/columns;
+	int column=i-row*columns;
+	image_blit(output,images+i,column_width*column-x_min,row_height*row-y_min);
+	}
+
+printf("Width %d Height %d\n",width,height);
+}
+
+
