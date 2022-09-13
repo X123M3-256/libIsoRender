@@ -40,8 +40,6 @@ light_t lights[9]={
 };
 */
 
-
-
 /*
 B&M match
 float diffuse=0.35;
@@ -88,70 +86,19 @@ light_t lights[9]={
 {LIGHT_DIFFUSE,0,vector3_normalize(vector3(-1.0,-0.5,0.0)),0.1},
 };
 
-float diffuse=0.4;
-float specular=1.0;
-float exponent=4;
-
-
-float diffuse2=0.5;
-float specular2=0.6;
-float exponent2=5;
-
-/*
-light_t lights[9]={
-{LIGHT_DIFFUSE,0,vector3_normalize(vector3(0.0,-1.0,0.0)),0.25},
-{LIGHT_DIFFUSE,0,vector3_normalize(vector3(1.0,0.3,0.0)),0.32},
-{LIGHT_SPECULAR,0,vector3_normalize(vector3(1,0.65,-1)),1.0},
-{LIGHT_DIFFUSE,0,vector3_normalize(vector3(1,0.65,-1)),0.8},
-{LIGHT_DIFFUSE,0,vector3(0.0,1.0,0.0),0.174},
-{LIGHT_DIFFUSE,0,vector3_normalize(vector3(-1.0,0.0,0.0)),0.15},
-{LIGHT_DIFFUSE,0,vector3_normalize(vector3(0.0,1.0,1.0)),0.0},
-{LIGHT_DIFFUSE,0,vector3_normalize(vector3(0.65,0.816,-0.65000000)),0},
-{LIGHT_DIFFUSE,0,vector3_normalize(vector3(-1.0,0.0,-1.0)),0.25},
-};
-*/
-
-context_init(&context,lights,9,palette_rct2(),1);//500);
-
+context_init(&context,lights,9,palette_rct2(),1);
 
 matrix_t import_transform={{1,0,0, 0,0,1, 0,1,0}};
 
 mesh_t mesh_base;
-	if(mesh_load(&mesh_base,"../RCT2RideGen/trains/rmc/front_car.obj"))
-	//if(mesh_load(&mesh_base,"test_train_lighting.obj"))
-	//if(mesh_load_transform(&mesh_base,"intamin.stl",import_transform))
+	if(mesh_load(&mesh_base,"test.obj"))
 	{
 	printf("Failed loading object\n");
 	return 0;
 	}
-
-
-mesh_base.materials[1].flags|=MATERIAL_IS_REMAPPABLE;
-mesh_base.materials[1].region=1;
-//mesh_base.materials[1].color=vector3(0,diffuse,0);
-mesh_base.materials[1].specular_color=vector3(specular,specular,specular);
-mesh_base.materials[1].specular_exponent=exponent;
-		
-/*
-mesh_t mesh_base2;
-	if(mesh_load_transform(&mesh_base2,"intamintie.stl",import_transform))
-	{
-	printf("Failed loading object\n");
-	return 0;
-	}
-
-
-mesh_base2.materials[0].flags=MATERIAL_IS_REMAPPABLE|MATERIAL_BACKGROUND_AA;
-mesh_base2.materials[0].region=1;
-mesh_base2.materials[0].color=vector3(0,diffuse2,0);
-mesh_base2.materials[0].specular_color=vector3(specular2,specular2,specular2);
-mesh_base2.materials[0].specular_exponent=exponent2;
-*/	
-
 
 context_begin_render(&context);
-context_add_model(&context,&mesh_base,transform(rotate_y((0.5)*M_PI),vector3(0,0,0)),0);
-//context_add_model(&context,&mesh_base2,transform(views[0],vector3(0,0,0)),0);
+context_add_model(&context,&mesh_base,transform(rotate_y(M_PI),vector3(0,0,0)),0);
 context_finalize_render(&context);
 
 image_t images[4];
