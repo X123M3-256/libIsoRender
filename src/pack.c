@@ -67,7 +67,6 @@ int p2=images[*((int*)b)].width*images[*((int*)b)].height;
 	else return -1;
 }
 
-
 int cmp_perimeter(const void* a,const void* b,void* arg)
 {
 image_t* images=(image_t*)arg;
@@ -88,42 +87,35 @@ int p2=fmax(images[*((int*)b)].width,images[*((int*)b)].height);
 	else return -1;
 }
 
-struct sort_r_data
+//Windows does not provide qsort_r
+
+#if (defined _WIN32 || defined _WIN64 || defined __WINDOWS__)
+struct qsort_r_data
 {
-  void *arg;
-  int (*compar)(const void *a1, const void *a2, void *aarg);
+void *arg;
+int (*compar)(const void *a1, const void *a2, void *aarg);
 };
 
-int sort_r_arg_swap(void *s, const void *aa, const void *bb)
+int qsort_r_arg_swap(void *s, const void *aa, const void *bb)
 {
-  struct sort_r_data *ss = (struct sort_r_data*)s;
-  return (ss->compar)(aa, bb, ss->arg);
+struct sort_r_data *ss=(struct sort_r_data*)s;
+return (ss->compar)(aa,bb,ss->arg);
 }
 
-void sort_r(void *base, size_t nel, size_t width,
-            int (*compar)(const void *a1, const void *a2, void *aarg), void *arg)
+void qsort_r(void *base, size_t nel, size_t width, int (*compar)(const void *a1, const void *a2, void *aarg), void *arg)
 {
-  #if (defined __linux__)
-
-    qsort_r(base, nel, width, compar, arg);
-
-  #elif (defined _WIN32 || defined _WIN64 || defined __WINDOWS__)
-
-    struct sort_r_data tmp = {arg, compar};
-    qsort_s(base, nel, width, &sort_r_arg_swap, &tmp);
-
-  #else
-    #error Cannot detect operating system
-  #endif
+struct qsort_r_data tmp={arg, compar};
+qsort_s(base,nel,width,&sort_r_arg_swap,&tmp);
 }
+#endif
+
 
 int pack_rects_fixed_with_comparator(image_t* images,int num_images,int width,int height,int* x_coords,int* y_coords,int (*compare)(const void*,const void*, void*))
 {
-//printf("Size %d %d\n",width,height);
 int* permutation=calloc(num_images,sizeof(int));
 	for(int i=0;i<num_images;i++)permutation[i]=i;
 
-sort_r(permutation,num_images,sizeof(int),compare,images);
+qsort_r(permutation,num_images,sizeof(int),compare,images);
 
 
 int max_empty_spaces=10000;
@@ -138,9 +130,6 @@ int i;
 	for(i=0;i<num_images;i++)
 	{
 	image_t* image=images+permutation[i];
-	//printf("Image w %d h %d\n",image->width,image->height);
-	//printf("Free spaces:\n");
-	//print_rects(empty_spaces,num_empty_spaces);
 	int j;
 	int num_created_rects=-1;
 	rect_t created_rects[2];
@@ -218,9 +207,6 @@ int i;
 	memcpy(empty_spaces+num_empty_spaces-1,created_rects,num_created_rects*sizeof(rect_t));
 	num_empty_spaces+=num_created_rects-1;	
 	}
-
-//printf("Free spaces:\n");
-//print_rects(empty_spaces,num_empty_spaces);
 
 free(permutation);
 free(empty_spaces);
