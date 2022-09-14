@@ -48,7 +48,7 @@ bitset[0]=0;
 bitset[1]=0;
 }
 
-int bitset_set(uint64_t* bitset,int bit)
+void bitset_set(uint64_t* bitset,int bit)
 {
 assert(bit<128);
 	if(bit<64)bitset[0]|=1ULL<<bit;
@@ -135,14 +135,22 @@ void scene_add_model(scene_t* scene,mesh_t* mesh,vertex_t (*transform)(vector3_t
 	scene->num_meshes++;
 	//Create Embree geometry
 	RTCGeometry geom=rtcNewGeometry(scene->embree_device,RTC_GEOMETRY_TYPE_TRIANGLE);
+		if(geom==NULL)
+		{
+		printf("Failed allocating geometry\n");
+		return;
+		}
+
 	rtcSetGeometryVertexAttributeCount(geom,1);
 	float* vertices=(float*)rtcSetNewGeometryBuffer(geom,RTC_BUFFER_TYPE_VERTEX,0,RTC_FORMAT_FLOAT3,3*sizeof(float),mesh->num_vertices);
 	float* normals=(float*)rtcSetNewGeometryBuffer(geom,RTC_BUFFER_TYPE_VERTEX_ATTRIBUTE,0,RTC_FORMAT_FLOAT3,3*sizeof(float),mesh->num_vertices);
-;	
+;
 	unsigned int* indices=(unsigned int*) rtcSetNewGeometryBuffer(geom,RTC_BUFFER_TYPE_INDEX,0,RTC_FORMAT_UINT3,3*sizeof(unsigned int),mesh->num_faces);
-		if(!(vertices&&indices))
+		if(!(vertices&&indices&&normals))
 		{
 		printf("Failed allocating geometry buffer\n");
+		rtcReleaseGeometry(geom);
+		return;
 		}
 
 		for(uint32_t i=0;i<mesh->num_vertices;i++)
@@ -162,8 +170,6 @@ void scene_add_model(scene_t* scene,mesh_t* mesh,vertex_t (*transform)(vector3_t
 		scene->z_min=min(scene->z_min,transformed_vertex.vertex.z);
 		}
 
-	
-	
 		for(uint32_t i=0;i<mesh->num_faces;i++)
 		{
 		indices[3*i+0]=mesh->faces[i].indices[0];

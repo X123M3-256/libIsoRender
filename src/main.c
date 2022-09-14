@@ -5,9 +5,10 @@
 #include "model.h"
 #include "renderer.h"
 
+
+
 int main()
 {
-
 context_t context;
 //vector3(0.65190909243,0.38733586252+0.2,-0.65190909243)
 /*
@@ -86,7 +87,7 @@ light_t lights[9]={
 {LIGHT_DIFFUSE,0,vector3_normalize(vector3(-1.0,-0.5,0.0)),0.1},
 };
 
-context_init(&context,lights,9,palette_rct2(),1);
+context_init(&context,lights,9,palette_rct2(),3.3);
 
 matrix_t import_transform={{1,0,0, 0,0,1, 0,1,0}};
 
@@ -102,14 +103,19 @@ context_add_model(&context,&mesh_base,transform(rotate_y(M_PI),vector3(0,0,0)),0
 context_finalize_render(&context);
 
 image_t images[4];
-	for(int i=0;i<4;i++)context_render_view(&context,views[i],images+i);
-context_end_render(&context);
+	for(int i=0;i<4;i++)
+	{
+	printf("Rendering image %d\r\n",i);
+	fflush(stdout);
+	context_render_view(&context,views[i],images+i);
+	}
+	context_end_render(&context);
 
 	for(int i=0;i<4;i++)
 	{
 	char iamastupididiot[16];
 	sprintf(iamastupididiot,"test_%d.png",i);
-	FILE* f=fopen(iamastupididiot,"w");
+	FILE* f=fopen(iamastupididiot,"wb");
 	image_write_png(images+i,f);
 	fclose(f);
 	image_destroy(images+i);

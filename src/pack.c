@@ -29,7 +29,7 @@ void delete_rect(rect_t* rects,int num_rects,int i)
 memmove(rects+i,rects+i+1,(num_rects-i-1)*sizeof(rect_t));
 }
 
-int print_rects(rect_t* rects,int num_rects)
+void print_rects(rect_t* rects,int num_rects)
 {
 	for(int i=0;i<num_rects;i++)
 	{
@@ -88,12 +88,43 @@ int p2=fmax(images[*((int*)b)].width,images[*((int*)b)].height);
 	else return -1;
 }
 
+struct sort_r_data
+{
+  void *arg;
+  int (*compar)(const void *a1, const void *a2, void *aarg);
+};
+
+int sort_r_arg_swap(void *s, const void *aa, const void *bb)
+{
+  struct sort_r_data *ss = (struct sort_r_data*)s;
+  return (ss->compar)(aa, bb, ss->arg);
+}
+
+void sort_r(void *base, size_t nel, size_t width,
+            int (*compar)(const void *a1, const void *a2, void *aarg), void *arg)
+{
+  #if (defined __linux__)
+
+    qsort_r(base, nel, width, compar, arg);
+
+  #elif (defined _WIN32 || defined _WIN64 || defined __WINDOWS__)
+
+    struct sort_r_data tmp = {arg, compar};
+    qsort_s(base, nel, width, &sort_r_arg_swap, &tmp);
+
+  #else
+    #error Cannot detect operating system
+  #endif
+}
+
 int pack_rects_fixed_with_comparator(image_t* images,int num_images,int width,int height,int* x_coords,int* y_coords,int (*compare)(const void*,const void*, void*))
 {
 //printf("Size %d %d\n",width,height);
 int* permutation=calloc(num_images,sizeof(int));
 	for(int i=0;i<num_images;i++)permutation[i]=i;
-qsort_r(permutation,num_images,sizeof(int),compare,images);
+
+sort_r(permutation,num_images,sizeof(int),compare,images);
+
 
 int max_empty_spaces=10000;
 int num_empty_spaces=1;
@@ -208,7 +239,7 @@ int pack_rects_fixed(image_t* images,int num_images,int width,int height,int* x_
 return 0;
 }
 
-int pack_rects(image_t* images,int num_images,int* width_ptr,int* height_ptr,int* x_coords,int* y_coords)
+void pack_rects(image_t* images,int num_images,int* width_ptr,int* height_ptr,int* x_coords,int* y_coords)
 {
 int size=256;
 	while(!pack_rects_fixed(images,num_images,size,size,x_coords,y_coords))size*=2;

@@ -2,13 +2,14 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+
 #include <png.h>
+
 #include <assimp/cimport.h>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 #include "model.h"
 #include "palette.h"
-#define DEBUG
 
 void texture_init(texture_t* texture,uint16_t width,uint16_t height)
 	{
@@ -125,7 +126,6 @@ const struct aiScene* scene = aiImportFile(filename,import_flags);
 	return 1;
 	}
 
-
 output->num_materials=scene->mNumMaterials;
 output->materials=malloc(scene->mNumMaterials*sizeof(material_t));
 
@@ -178,7 +178,7 @@ output->materials=malloc(scene->mNumMaterials*sizeof(material_t));
 		output->materials[i].flags|=MATERIAL_HAS_TEXTURE;
 			if(texture_load_png(&(output->materials[i].texture),texture_path.data))
 			{
-			printf("Failed to load texture \"%s\"\n",texture_path.data);
+			printf("Failed to load texture \"%s\"\r\n",texture_path.data);
 			free(output->vertices);
 			free(output->normals);
 			free(output->faces);
@@ -214,7 +214,6 @@ output->materials=malloc(scene->mNumMaterials*sizeof(material_t));
 		//printf("%d\n",output->materials[i].specular_hardness);
 		}
 	}
-
 //Count vertices and faces in scene
 output->num_vertices=0;
 output->num_faces=0;
@@ -238,7 +237,6 @@ uint32_t mesh_start_face=0;
 	{
 	const struct aiMesh* mesh=scene->mMeshes[j];
 	assert(mesh->mNormals);
-	
 		for(uint32_t i=0;i<mesh->mNumVertices;i++)
 		{
 		output->vertices[mesh_start_vertex+i]=matrix_vector(matrix,vector3(mesh->mVertices[i].x,mesh->mVertices[i].y,mesh->mVertices[i].z));
@@ -282,6 +280,6 @@ free(mesh->materials);
 
 int mesh_load(mesh_t* output,const char* filename)
 {
-mesh_load_transform(output,filename,matrix_identity());
+return mesh_load_transform(output,filename,matrix_identity());
 }
 
