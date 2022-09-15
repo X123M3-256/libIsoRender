@@ -98,14 +98,14 @@ int (*compar)(const void *a1, const void *a2, void *aarg);
 
 int qsort_r_arg_swap(void *s, const void *aa, const void *bb)
 {
-struct sort_r_data *ss=(struct sort_r_data*)s;
+struct qsort_r_data *ss=(struct qsort_r_data*)s;
 return (ss->compar)(aa,bb,ss->arg);
 }
 
 void qsort_r(void *base, size_t nel, size_t width, int (*compar)(const void *a1, const void *a2, void *aarg), void *arg)
 {
 struct qsort_r_data tmp={arg, compar};
-qsort_s(base,nel,width,&sort_r_arg_swap,&tmp);
+qsort_s(base,nel,width,&qsort_r_arg_swap,&tmp);
 }
 #endif
 
