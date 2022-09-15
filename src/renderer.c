@@ -365,54 +365,9 @@ image->pixels=calloc(image->width*image->height,sizeof(uint8_t));
 free(framebuffer->fragments);
 }
 
-void framebuffer_save_bmp(framebuffer_t* framebuffer,char* filename)
-{
-int padding=(4-(framebuffer->width*3)%4)%4;
-int data_size=framebuffer->height*(framebuffer->width*3+padding);
-
-uint8_t bitmap_header[54];
-memset(bitmap_header,0,54);
-
-bitmap_header[0]='B';
-bitmap_header[1]='M';
-*((uint32_t*)(bitmap_header+2))=54+data_size;
-*((uint32_t*)(bitmap_header+10))=54;
-*((uint32_t*)(bitmap_header+14))=40;
-*((uint32_t*)(bitmap_header+18))=framebuffer->width;
-*((uint32_t*)(bitmap_header+22))=framebuffer->height;
-*((uint16_t*)(bitmap_header+26))=1;
-*((uint16_t*)(bitmap_header+28))=24;
-*((uint32_t*)(bitmap_header+38))=2834;
-*((uint32_t*)(bitmap_header+42))=2834;
-
-FILE* file=fopen(filename,"wb");
-	if(file==NULL)
-	{
-	printf("File open failed %d\n",errno);
-	return;
-	}
-
-fwrite(bitmap_header,1,54,file);
-
-	for(int32_t y=framebuffer->height-1;y>=0;y--)
-	{
-		for(uint32_t x=0;x<framebuffer->width;x++)
-		{
-		color_t color=color_from_vector(framebuffer->fragments[x+y*framebuffer->width].color);
-		fputc(color.b,file);
-		fputc(color.g,file);
-		fputc(color.r,file);
-		}
-		for(uint32_t k=0;k<padding;k++)fputc(0,file);
-	}
-
-fclose(file);
-}
-
 void context_render_view_internal(context_t* context,matrix_t view,image_t* image,uint32_t silhouette)
 {
 matrix_t camera=matrix_mult(context->projection,view);
-
 
 rect_t bounds=scene_get_bounds(&(context->rt_scene),camera);
 
@@ -577,7 +532,6 @@ matrix_t camera_inverse=matrix_inverse(camera);
 			}
 	}
 
-framebuffer_save_bmp(&framebuffer,"test.bmp");
 //Convert to indexed color
 image_from_framebuffer(image,&framebuffer,&(context->palette));
 free(transformed_lights);
