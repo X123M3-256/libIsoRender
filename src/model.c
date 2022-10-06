@@ -271,6 +271,7 @@ uint32_t mesh_start_face=0;
 
 		for(uint32_t i=0;i<mesh->mNumFaces;i++)
 		{
+			if(mesh->mFaces[i].mNumIndices<3)continue;
 		assert(mesh->mFaces[i].mNumIndices==3);
 		output->faces[mesh_start_face+i].material=mesh->mMaterialIndex;
 			for(uint32_t j=0;j<3;j++)output->faces[mesh_start_face+i].indices[j]=mesh_start_vertex+mesh->mFaces[i].mIndices[j];
