@@ -63,6 +63,10 @@ vector3_t texture_sample(texture_t* texture,vector2_t coord);
 int texture_load_png(texture_t* texture,const char* filename);
 void texture_destroy(texture_t* texture);
 
+
+material_t material_color(vector3_t color,vector3_t specular_color,float specular_exponent,uint8_t flags);
+material_t material_texture(const char* filename,vector3_t specular_color,float specular_exponent,uint8_t flags);
+
 int mesh_load(mesh_t* mesh,const char* filename);
 int mesh_load_transform(mesh_t* output,const char* filename,matrix_t matrix);
 void mesh_destroy(mesh_t* mesh);

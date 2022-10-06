@@ -29,13 +29,13 @@ png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL
 	if(!png)
 	{
 	fclose(fp);
-	return 1;
+	return 2;
 	}
 png_infop info = png_create_info_struct(png);
 	if(!info)
 	{
 	fclose(fp);
-	return 1;
+	return 3;
 	}	
 	if(setjmp(png_jmpbuf(png))) abort();//TODO Not sure what this does but I don't think it's what I want
 
@@ -69,7 +69,6 @@ png_bytep* row_pointers=malloc(sizeof(png_bytep)*texture->height);
 png_read_image(png,row_pointers);
 
 texture->pixels=malloc(texture->width*texture->height*sizeof(vector3_t));
-
 	for(int y=0;y<texture->height;y++)
 	for(int x=0;x<texture->width;x++)
 	{
@@ -92,12 +91,10 @@ return fmax(0.0,fmin(1.0,coord-floor(coord)));
 
 vector3_t texture_sample(texture_t* texture,vector2_t coord)
 	{
-	uint16_t tex_x=(uint32_t)(texture->width*wrap_coord(coord.x)-0.5);
-	uint16_t tex_y=(uint32_t)(texture->height*wrap_coord(coord.y)-0.5);
-		if(tex_x>=texture->width)
-		{
-		printf("X: %d Width\n",tex_x,texture->width);
-		}
+	uint16_t tex_x=(uint32_t)(texture->width*wrap_coord(coord.x));
+	uint16_t tex_y=(uint32_t)(texture->height*wrap_coord(coord.y));
+		if(tex_x>=texture->width)printf("X: %d Width %d\n",tex_x,texture->width);
+		if(tex_y>=texture->height)printf("Y: %d Height %d\n",tex_y,texture->height);
 	assert(tex_x<texture->width&&tex_y<texture->height);
 	return texture->pixels[tex_y*texture->width+tex_x];
 	}
@@ -108,6 +105,30 @@ void texture_destroy(texture_t* texture)
 	}
 
 
+material_t material_color(vector3_t color,vector3_t specular_color,float specular_exponent,uint8_t flags)
+{
+material_t material;
+material.flags=flags&(~MATERIAL_HAS_TEXTURE);
+material.color=color;
+material.specular_color=specular_color;
+material.specular_exponent=specular_exponent;
+return material;
+}
+
+material_t material_texture(const char* filename,vector3_t specular_color,float specular_exponent,uint8_t flags)
+{
+material_t material;
+	if(texture_load_png(&(material.texture),filename))
+	{
+	printf("Failed to load %s\n",filename);
+	material.flags=flags&(~MATERIAL_HAS_TEXTURE);
+	material.color=vector3(0.25,0.25,0.25);
+	}
+	else material.flags=flags|MATERIAL_HAS_TEXTURE;
+material.specular_color=specular_color;
+material.specular_exponent=specular_exponent;
+return material;
+}
 
 int mesh_load_transform(mesh_t* output,const char* filename,matrix_t matrix)
 {
