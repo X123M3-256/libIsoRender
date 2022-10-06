@@ -77,11 +77,4 @@ void context_render_silhouette(context_t* context,matrix_t view,image_t* image);
 void context_finalize_render(context_t* context);
 void context_end_render(context_t* context);
 
-
-
-
-
-
-
-//void render_save_bmp(render_t* render,char* filename);
 #endif // RENDERER_H_INCLUDED
