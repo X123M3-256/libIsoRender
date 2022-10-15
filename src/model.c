@@ -93,6 +93,8 @@ vector3_t texture_sample(texture_t* texture,vector2_t coord)
 	{
 	uint16_t tex_x=(uint32_t)(texture->width*wrap_coord(coord.x));
 	uint16_t tex_y=(uint32_t)(texture->height*wrap_coord(coord.y));
+		if(tex_x==texture->width)tex_x=0;
+		if(tex_y==texture->height)tex_y=0;
 		if(tex_x>=texture->width)printf("X: %d Width %d\n",tex_x,texture->width);
 		if(tex_y>=texture->height)printf("Y: %d Height %d\n",tex_y,texture->height);
 	assert(tex_x<texture->width&&tex_y<texture->height);
@@ -150,7 +152,7 @@ const struct aiScene* scene = aiImportFile(filename,import_flags);
 output->num_materials=scene->mNumMaterials;
 output->materials=malloc(scene->mNumMaterials*sizeof(material_t));
 
-	for(uint32_t i=0;i<scene->mNumMaterials;i++)
+	for(size_t i=0;i<scene->mNumMaterials;i++)
 	{
 	output->materials[i].flags=0;		
 	output->materials[i].region=0;
@@ -239,11 +241,20 @@ output->materials=malloc(scene->mNumMaterials*sizeof(material_t));
 output->num_vertices=0;
 output->num_faces=0;
 
-	for(uint32_t j=0;j<scene->mNumMeshes;j++)
+	for(size_t j=0;j<scene->mNumMeshes;j++)
 	{
+	const struct aiMesh* mesh=scene->mMeshes[j];
+	assert(mesh->mNormals);
+		for(size_t i=0;i<mesh->mNumFaces;i++)
+		{
+			if(mesh->mFaces[i].mNumIndices<3)continue;
+		assert(mesh->mFaces[i].mNumIndices==3);
+		output->num_faces++;
+		}
 	output->num_vertices+=scene->mMeshes[j]->mNumVertices;
-	output->num_faces+=scene->mMeshes[j]->mNumFaces;
 	}
+
+printf("Loading model with %d vertices and %d faces\n",output->num_vertices,output->num_faces);
 
 //TODO detect if UVs are not used and do not load them
 output->vertices=malloc(output->num_vertices*sizeof(vector3_t));
@@ -251,14 +262,14 @@ output->normals=malloc(output->num_vertices*sizeof(vector3_t));
 output->uvs=malloc(output->num_vertices*sizeof(vector2_t));
 output->faces=malloc(output->num_faces*sizeof(face_t));
 
-uint32_t mesh_start_vertex=0;	
-uint32_t mesh_start_face=0;
+size_t mesh_start_vertex=0;	
+size_t mesh_start_face=0;
 	
-	for(uint32_t j=0;j<scene->mNumMeshes;j++)
+	for(size_t j=0;j<scene->mNumMeshes;j++)
 	{
 	const struct aiMesh* mesh=scene->mMeshes[j];
 	assert(mesh->mNormals);
-		for(uint32_t i=0;i<mesh->mNumVertices;i++)
+		for(size_t i=0;i<mesh->mNumVertices;i++)
 		{
 		output->vertices[mesh_start_vertex+i]=matrix_vector(matrix,vector3(mesh->mVertices[i].x,mesh->mVertices[i].y,mesh->mVertices[i].z));
 		output->normals[mesh_start_vertex+i]=matrix_vector(matrix,vector3(mesh->mNormals[i].x,mesh->mNormals[i].y,mesh->mNormals[i].z));
@@ -269,15 +280,15 @@ uint32_t mesh_start_face=0;
 			else output->uvs[mesh_start_vertex+i]=vector2(0.0,0.0);
 		}
 
-		for(uint32_t i=0;i<mesh->mNumFaces;i++)
+		for(size_t i=0;i<mesh->mNumFaces;i++)
 		{
 			if(mesh->mFaces[i].mNumIndices<3)continue;
 		assert(mesh->mFaces[i].mNumIndices==3);
-		output->faces[mesh_start_face+i].material=mesh->mMaterialIndex;
-			for(uint32_t j=0;j<3;j++)output->faces[mesh_start_face+i].indices[j]=mesh_start_vertex+mesh->mFaces[i].mIndices[j];
+		output->faces[mesh_start_face].material=mesh->mMaterialIndex;
+			for(uint32_t j=0;j<3;j++)output->faces[mesh_start_face].indices[j]=mesh_start_vertex+mesh->mFaces[i].mIndices[j];
+		mesh_start_face++;
 		}
 	mesh_start_vertex+=mesh->mNumVertices;
-	mesh_start_face+=mesh->mNumFaces;
 	}
 aiReleaseImport(scene);
 return 0;
